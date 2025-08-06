@@ -1,0 +1,185 @@
+
+import logging
+from playwright.sync_api import sync_playwright, Page, Browser
+from src import selectors
+
+class ChessBrowser:
+    """
+    Manages the Playwright browser session.
+    """
+    def __init__(self, config):
+        self.config = config
+        self.playwright = None
+        self.browser = None
+        self.page = None
+
+    def start(self):
+        """Starts the browser and creates a new page."""
+        logging.info("Starting browser...")
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.launch(
+            headless=self.config.getboolean("play", "headless"),
+        )
+        self.page = self.browser.new_page()
+
+    def login(self, username, password):
+        """Logs into chess.com."""
+        logging.info("Logging in...")
+        self.page.goto("https://www.chess.com/login")
+        self.page.fill(selectors.LOGIN_USERNAME_INPUT, username)
+        self.page.fill(selectors.LOGIN_PASSWORD_INPUT, password)
+        login_button_selectors = [
+            "button:has-text('Log In')",
+            "button[type='submit']", # Fallback
+        ]
+        clicked = False
+        for selector in login_button_selectors:
+            try:
+                with self.page.expect_navigation():
+                    self.page.click(selector, timeout=5000)
+                clicked = True
+                break
+            except Exception:
+                logging.debug(f"Could not click login button with selector: {selector}")
+        
+        if not clicked:
+            logging.error("Failed to find and click any login button.")
+            raise Exception("Login button not found.")
+
+        if "chess.com" not in self.page.url or "login" in self.page.url:
+            screenshot_path = "login_failure.png"
+            self.page.screenshot(path=screenshot_path)
+            logging.error(f"Login failed. Current URL: {self.page.url}. Screenshot saved to {screenshot_path}")
+            raise Exception("Login failed: Not redirected to home page.")
+        logging.info("Login successful.")
+        try:
+            self.page.wait_for_selector("a.home-username-link", timeout=20000) # Wait for username link as login success indicator
+            logging.debug("Home page loaded successfully after login.")
+        except Exception as e:
+            screenshot_path = "home_page_load_failure.png"
+            self.page.screenshot(path=screenshot_path)
+            logging.error(f"Home page did not load after login: {e}. Screenshot saved to {screenshot_path}")
+            raise
+
+    def start(self):
+        """Starts the browser and creates a new page."""
+        logging.info("Starting browser...")
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.launch(
+            headless=self.config.getboolean("play", "headless"),
+        )
+        self.page = self.browser.new_page()
+
+    def login(self, username, password):
+        """
+        Logs into chess.com.
+        """
+        logging.info("Logging in...")
+        self.page.goto("https://www.chess.com/login")
+        self.page.fill(selectors.LOGIN_USERNAME_INPUT, username)
+        self.page.fill(selectors.LOGIN_PASSWORD_INPUT, password)
+        login_button_selectors = [
+            "button:has-text('Log In')",
+            "button[type='submit']", # Fallback
+        ]
+        clicked = False
+        for selector in login_button_selectors:
+            try:
+                with self.page.expect_navigation():
+                    self.page.click(selector, timeout=5000)
+                clicked = True
+                break
+            except Exception:
+                logging.debug(f"Could not click login button with selector: {selector}")
+        
+        if not clicked:
+            logging.error("Failed to find and click any login button.")
+            raise Exception("Login button not found.")
+
+        if "chess.com" not in self.page.url or "login" in self.page.url:
+            screenshot_path = "login_failure.png"
+            self.page.screenshot(path=screenshot_path)
+            logging.error(f"Login failed. Current URL: {self.page.url}. Screenshot saved to {screenshot_path}")
+            raise Exception("Login failed: Not redirected to home page.")
+        logging.info("Login successful.")
+        try:
+            self.page.wait_for_selector("a.home-username-link", timeout=20000) # Wait for username link as login success indicator
+            logging.debug("Home page loaded successfully after login.")
+        except Exception as e:
+            screenshot_path = "home_page_load_failure.png"
+            self.page.screenshot(path=screenshot_path)
+            logging.error(f"Home page did not load after login: {e}. Screenshot saved to {screenshot_path}")
+            raise
+
+    def select_mode(self):
+        """Selects the game mode."""
+        logging.info(f"Selecting mode: {self.config.get('play', 'mode')}")
+        try:
+            self.page.goto("https://www.chess.com/play/online", timeout=30000) # Increased timeout for goto
+            self.page.wait_for_url("https://www.chess.com/play/online", timeout=30000) # Explicitly wait for URL
+            self.page.wait_for_selector(selectors.TIME_CONTROL_DROPDOWN_BUTTON, timeout=30000) # Wait for a key element
+            logging.info("Successfully navigated to play online page.")
+        except Exception as e:
+            screenshot_path = "play_online_navigation_failure.png"
+            self.page.screenshot(path=screenshot_path)
+            logging.error(f"Failed to navigate to play online page: {e}. Screenshot saved to {screenshot_path}")
+            raise
+
+        # Click the time control dropdown button
+        try:
+            self.page.click(selectors.TIME_CONTROL_DROPDOWN_BUTTON, timeout=10000)
+            logging.info("Clicked time control dropdown.")
+        except Exception as e:
+            logging.error(f"Could not click time control dropdown: {e}")
+            raise
+
+        mode = self.config.get("play", "mode").lower()
+        time_control_selector = selectors.TIME_CONTROL_SELECTORS.get(mode)
+
+        if not time_control_selector:
+            logging.error(f"Invalid mode specified: {mode}")
+            raise ValueError(f"Invalid mode specified: {mode}")
+
+        try:
+            # Wait for the specific time control option to be visible after dropdown click
+            self.page.wait_for_selector(time_control_selector, state="visible", timeout=10000)
+            self.page.click(time_control_selector, timeout=10000)
+            logging.info(f"Clicked time control: {mode}")
+        except Exception as e:
+            logging.error(f"Could not click time control {mode}: {e}")
+            raise
+
+        clicked_play_button = False
+        for selector in selectors.PLAY_BUTTON_SELECTORS:
+            try:
+                with self.page.expect_navigation():
+                    self.page.click(selector, timeout=5000)
+                clicked_play_button = True
+                break
+            except Exception:
+                logging.debug(f"Could not click play button with selector: {selector}")
+
+        if not clicked_play_button:
+            logging.error("Failed to find and click any play button.")
+            raise Exception("Play button not found.")
+
+        try:
+            self.page.wait_for_selector(selectors.BOARD_SELECTOR, timeout=30000)
+            logging.debug("Board loaded successfully.")
+        except Exception as e:
+            logging.error(f"Board did not load after selecting mode: {e}")
+            raise
+
+    def close(self):
+        """Closes the browser."""
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
+
+    def close(self):
+        """Closes the browser."""
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
