@@ -1,21 +1,21 @@
-
 import logging
 from playwright.sync_api import sync_playwright, Page, Browser
 from src import selectors
+import re
 
 class ChessBrowser:
-    """
-    Manages the Playwright browser session.
-    """
-    def __init__(self, config):
+    def __init__(self, config, stats):
         self.config = config
+        self.stats = stats # Store stats object
         self.playwright = None
         self.browser = None
         self.page = None
+        self.nickname = "null"
+        self.current_elo = "null"
 
     def start(self):
         """Starts the browser and creates a new page."""
-        logging.info("Starting browser...")
+        logging.debug("Starting browser...")
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(
             headless=self.config.getboolean("play", "headless"),
@@ -24,7 +24,7 @@ class ChessBrowser:
 
     def login(self, username, password):
         """Logs into chess.com."""
-        logging.info("Logging in...")
+        logging.debug("Logging in...")
         self.page.goto("https://www.chess.com/login")
         self.page.fill(selectors.LOGIN_USERNAME_INPUT, username)
         self.page.fill(selectors.LOGIN_PASSWORD_INPUT, password)
@@ -51,7 +51,7 @@ class ChessBrowser:
             self.page.screenshot(path=screenshot_path)
             logging.error(f"Login failed. Current URL: {self.page.url}. Screenshot saved to {screenshot_path}")
             raise Exception("Login failed: Not redirected to home page.")
-        logging.info("Login successful.")
+        logging.debug("Login successful.")
         try:
             self.page.wait_for_selector("a.home-username-link", timeout=20000) # Wait for username link as login success indicator
             logging.debug("Home page loaded successfully after login.")
@@ -60,56 +60,8 @@ class ChessBrowser:
             self.page.screenshot(path=screenshot_path)
             logging.error(f"Home page did not load after login: {e}. Screenshot saved to {screenshot_path}")
             raise
-
-    def start(self):
-        """Starts the browser and creates a new page."""
-        logging.info("Starting browser...")
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
-            headless=self.config.getboolean("play", "headless"),
-        )
-        self.page = self.browser.new_page()
-
-    def login(self, username, password):
-        """
-        Logs into chess.com.
-        """
-        logging.info("Logging in...")
-        self.page.goto("https://www.chess.com/login")
-        self.page.fill(selectors.LOGIN_USERNAME_INPUT, username)
-        self.page.fill(selectors.LOGIN_PASSWORD_INPUT, password)
-        login_button_selectors = [
-            "button:has-text('Log In')",
-            "button[type='submit']", # Fallback
-        ]
-        clicked = False
-        for selector in login_button_selectors:
-            try:
-                with self.page.expect_navigation():
-                    self.page.click(selector, timeout=5000)
-                clicked = True
-                break
-            except Exception:
-                logging.debug(f"Could not click login button with selector: {selector}")
         
-        if not clicked:
-            logging.error("Failed to find and click any login button.")
-            raise Exception("Login button not found.")
-
-        if "chess.com" not in self.page.url or "login" in self.page.url:
-            screenshot_path = "login_failure.png"
-            self.page.screenshot(path=screenshot_path)
-            logging.error(f"Login failed. Current URL: {self.page.url}. Screenshot saved to {screenshot_path}")
-            raise Exception("Login failed: Not redirected to home page.")
-        logging.info("Login successful.")
-        try:
-            self.page.wait_for_selector("a.home-username-link", timeout=20000) # Wait for username link as login success indicator
-            logging.debug("Home page loaded successfully after login.")
-        except Exception as e:
-            screenshot_path = "home_page_load_failure.png"
-            self.page.screenshot(path=screenshot_path)
-            logging.error(f"Home page did not load after login: {e}. Screenshot saved to {screenshot_path}")
-            raise
+        
 
     def select_mode(self):
         """Selects the game mode."""
@@ -166,16 +118,55 @@ class ChessBrowser:
         try:
             self.page.wait_for_selector(selectors.BOARD_SELECTOR, timeout=30000)
             logging.debug("Board loaded successfully.")
+            self._extract_user_info() # Extract user info after board is loaded
         except Exception as e:
             logging.error(f"Board did not load after selecting mode: {e}")
             raise
 
-    def close(self):
-        """Closes the browser."""
-        if self.browser:
-            self.browser.close()
-        if self.playwright:
-            self.playwright.stop()
+    def _extract_user_info(self):
+        """Extracts nickname and ELO rating from the current page and updates stats."""
+        try:
+            # Wait for at least one of the nickname selectors to be visible
+            # Use page.locator().or_().wait_for() for multiple XPath selectors
+            self.page.locator(selectors.USER_TAGLINE_USERNAME_SELECTOR).or_(
+                self.page.locator(selectors.CC_USER_USERNAME_SELECTOR)
+            ).wait_for(timeout=10000)
+
+            # Extract Nickname
+            nickname_element = self.page.query_selector(selectors.USER_TAGLINE_USERNAME_SELECTOR) or \
+                               self.page.query_selector(selectors.CC_USER_USERNAME_SELECTOR)
+            if nickname_element:
+                self.nickname = nickname_element.inner_text().strip()
+            else:
+                self.nickname = "null"
+
+            # Wait for at least one of the ELO selectors to be visible
+            self.page.locator(selectors.CC_USER_RATING_SELECTOR_WHITE).or_(
+                self.page.locator(selectors.CC_USER_RATING_SELECTOR_BLACK)
+            ).wait_for(timeout=10000)
+            # Extract ELO Rating
+            elo_element = self.page.query_selector(selectors.CC_USER_RATING_SELECTOR_WHITE) or \
+                          self.page.query_selector(selectors.CC_USER_RATING_SELECTOR_BLACK)
+            if elo_element:
+                elo_text = elo_element.inner_text().strip()
+                elo_match = re.search(r'\((\d+)\)', elo_text)
+                if elo_match:
+                    self.current_elo = elo_match.group(1)
+                else:
+                    self.current_elo = "null"
+            else:
+                self.current_elo = "null"
+
+            self.stats.nickname = self.nickname
+            self.stats.current_elo = self.current_elo
+            if self.stats.start_elo == "null": # Set start ELO only once
+                self.stats.start_elo = self.current_elo
+
+            logging.debug(f"Extracted User Info: Nickname={self.nickname}, ELO={self.current_elo}")
+        except Exception as e:
+            logging.warning(f"Could not extract user info: {e}")
+            self.nickname = "null"
+            self.current_elo = "null"
 
     def close(self):
         """Closes the browser."""

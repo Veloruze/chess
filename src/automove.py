@@ -9,11 +9,13 @@ class AutoMove:
     """
     Executes a move on the board.
     """
-    def __init__(self, config, browser):
+    def __init__(self, config, browser, stats, display_callback):
         self.config = config
         self.browser = browser
+        self.stats = stats
+        self.display_callback = display_callback
 
-    def execute_move(self, move, letak_gerakan, is_flipped=False):
+    def execute_move(self, move, letak_gerakan, is_flipped=False, move_duration=0.0):
         """
         Executes a move on the board.
         """
@@ -124,6 +126,15 @@ class AutoMove:
                 self.browser.page.wait_for_timeout(random.uniform(5, 20)) # Delay between 5 and 20 milliseconds
 
             self.browser.page.mouse.up()
+
+            # Update average move time
+            if move_duration > 0:
+                if self.stats.avg_move_time == 0.0:
+                    self.stats.avg_move_time = move_duration
+                else:
+                    self.stats.avg_move_time = (self.stats.avg_move_time + move_duration) / 2
+
+            self.display_callback() # Refresh HUD after a move is executed
 
             logging.debug(f"Successfully dragged from {from_selector} to {to_selector}")
         except Exception as e:

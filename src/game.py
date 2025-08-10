@@ -5,6 +5,7 @@ from src.automove import AutoMove
 from src import selectors
 from playwright.sync_api import Error, TimeoutError as PlaywrightTimeoutError
 import random
+import time # Import time module
 from src.engine import _parse_config_value
 
 class Game:
@@ -18,12 +19,14 @@ class Game:
         "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1": ["c7c5", "e7e5", "c7c6"],
         "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1": ["g8f6", "d7d5", "c7c5"],
     }
-    def __init__(self, config, browser):
+    def __init__(self, config, browser, stats, display_callback):
         self.config = config
         self.browser = browser
+        self.stats = stats # Store stats object
+        self.display_callback = display_callback # Store display callback
         self.board = chess.Board()
         self.engine = StockfishEngine(config)
-        self.automove = AutoMove(config, browser)
+        self.automove = AutoMove(config, browser, stats, display_callback)
         self.color = None
 
     def start(self):
@@ -41,9 +44,10 @@ class Game:
         #     self.browser.page.wait_for_timeout(1000) # Wait for a second
 
     def detect_color(self):
-        """Detects the player's color."""
+        """Detects the player's color and extracts user info."""
         logging.debug("Detecting color...")
         board_element = self.browser.page.wait_for_selector(selectors.BOARD_SELECTOR)
+        self.browser._extract_user_info() # Extract user info now that the game board is loaded
         class_name = board_element.get_attribute("class")
         if "flipped" in class_name:
             self.color = chess.BLACK
@@ -54,6 +58,31 @@ class Game:
         logging.debug(f"Detected color: {self.color} (chess.WHITE: {chess.WHITE}, chess.BLACK: {chess.BLACK})")
 
     
+
+    def _update_stats_from_result(self, result_text):
+        """
+        Updates game statistics based on the game result text.
+        """
+        if result_text == "1-0": # White wins
+            if self.color == chess.WHITE:
+                self.stats.wins += 1
+            else:
+                self.stats.losses += 1
+        elif result_text == "0-1": # Black wins
+            if self.color == chess.BLACK:
+                self.stats.wins += 1
+            else:
+                self.stats.losses += 1
+        elif result_text == "1/2-1/2": # Draw
+            self.stats.draws += 1
+        else:
+            logging.warning(f"Unknown game result text: {result_text}")
+            return
+
+        # Update win rate
+        total_games = self.stats.wins + self.stats.losses + self.stats.draws
+        if total_games > 0:
+            self.stats.win_rate = (self.stats.wins / total_games) * 100
 
     def track_moves(self):
         """Tracks moves made on the board."""
@@ -68,8 +97,18 @@ class Game:
             raise
         
         while True:
+            # Prioritize checking for game result element
+            game_result_element = self.browser.page.query_selector(selectors.GAME_RESULT_SELECTOR)
+            if game_result_element:
+                result_text = game_result_element.inner_text().strip()
+                logging.info(f"Game result element detected: {result_text}. Exiting track_moves.")
+                self._update_stats_from_result(result_text)
+                return # Exit track_moves if game result is found
+
             if self.board.is_game_over():
-                logging.info(f"Game is over. Result: {self.board.result()}")
+                result = self.board.result()
+                logging.info(f"Game is over. Result: {result}")
+                self._update_stats_from_result(result)
                 return # Exit track_moves if game is over
             
             # Check for game over modal as an alternative way to detect game end
@@ -120,6 +159,15 @@ class Game:
                     try:
                         game_over_modal = self.browser.page.wait_for_selector(".game-over-modal-content", timeout=2000) # Wait up to 2 seconds for modal
                         logging.debug("Game over modal detected after timeout. Exiting track_moves.")
+                        # If modal is detected, we should also try to get the result from the .game-result span
+                        # as it's likely to be present with the modal.
+                        game_result_element_on_modal = self.browser.page.query_selector(selectors.GAME_RESULT_SELECTOR)
+                        if game_result_element_on_modal:
+                            result_text = game_result_element_on_modal.inner_text().strip()
+                            logging.info(f"Game result element detected within modal: {result_text}.")
+                            self._update_stats_from_result(result_text)
+                        else:
+                            logging.warning("Game over modal detected, but could not find game result element.")
                         return # Exit track_moves if game is over
                     except Error as modal_e:
                         if isinstance(modal_e, PlaywrightTimeoutError):
@@ -160,6 +208,7 @@ class Game:
                 logging.warning(f"Could not parse SAN move: {san_move} on board FEN: {self.board.fen()}")
 
         if move_successfully_pushed:
+            self.display_callback() # Refresh HUD after a move is pushed
             logging.debug(f"Current board turn: {self.board.turn}, Player color: {self.color}")
             if self.board.turn == self.color:
                 self.play_best_move()
@@ -186,6 +235,8 @@ class Game:
         Calculates and plays the best move using the Stockfish engine.
         """
         try:
+            move_start_time = time.time() # Start timing the move
+
             # Check opening book first
             current_fen = self.board.fen()
             if current_fen in self.OPENING_BOOK:
@@ -231,9 +282,17 @@ class Game:
                         logging.debug(f"Plenty of time ({remaining_time}s). Increasing thinking time.")
                         additional_delay += 0.5 # Add more delay
 
+                # Add artificial random delay
+                min_art_delay = float(_parse_config_value(self.config.get("play", "min_artificial_move_delay_seconds")))
+                max_art_delay = float(_parse_config_value(self.config.get("play", "max_artificial_move_delay_seconds")))
+                if min_art_delay > 0 or max_art_delay > 0:
+                    random_artificial_delay = random.uniform(min_art_delay, max_art_delay)
+                    additional_delay += random_artificial_delay
+                    logging.debug(f"Added random artificial delay: {random_artificial_delay:.2f}s. Total additional delay: {additional_delay:.2f}s.")
+
             if additional_delay > 0:
-                logging.debug(f"Adding total additional delay of {additional_delay}s.")
-                self.browser.page.wait_for_timeout(additional_delay * 1000) # Convert to milliseconds
+                logging.debug(f"Applying total additional delay of {additional_delay:.2f}s.")
+                time.sleep(additional_delay) # Use time.sleep for seconds
 
             logging.debug("Starting highlight process...")
             from_square_alg = chess.square_name(best_move.from_square)
@@ -298,9 +357,11 @@ class Game:
             except Exception as e:
                 logging.error(f"Terjadi kesalahan saat menyorot kotak: {e}")
 
+            move_duration = time.time() - move_start_time
+
             logging.debug("Starting auto-move process...")
             logging.debug(f"Passing is_flipped: {self.color == chess.BLACK} (self.color: {self.color})")
-            self.automove.execute_move(best_move, self.board.ply() // 2, is_flipped=self.color == chess.BLACK)
+            self.automove.execute_move(best_move, self.board.ply() // 2, is_flipped=self.color == chess.BLACK, move_duration=move_duration)
             logging.debug("Auto-move process finished. Pushing move to board.")
             self.board.push(best_move)
         except Exception as e:
