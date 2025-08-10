@@ -25,49 +25,7 @@ class AutoMove:
         if not auto_move_enabled:
             return
 
-        mode = self.config.get('play', 'mode')
-        # Assuming letak_gerakan is passed as an argument to execute_move
-        # For now, let's assume a placeholder or that it will be passed.
-        # I will add it as a parameter to execute_move in the next step.
-        # For now, I'll use a placeholder for letak_gerakan to implement the delay logic.
-        # This will be corrected when modifying the function signature.
-
-        # Placeholder for letak_gerakan, will be replaced with actual parameter
-        # For now, let's assume letak_gerakan is available.
-        # I will add letak_gerakan as a parameter to execute_move in the next step.
-        # For now, I'll use a dummy value or assume it's passed.
-
-        # The user provided the logic, so I'll implement it as is,
-        # and then adjust the function signature to accept letak_gerakan.
-
-        # The user's provided code snippet:
-        if mode == 'bullet':
-            if letak_gerakan <= 15:
-                waktu = random.uniform(0.05,0.10)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
-            else:
-                waktu = random.uniform(0.05,0.25)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
-        elif mode == 'blitz':
-            if letak_gerakan <= 15:
-                waktu = random.uniform(0.05,0.25)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
-            else:
-                waktu = random.uniform(0.05,1.25)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
-        elif mode == 'rapid':
-            if letak_gerakan <= 15:
-                waktu = random.uniform(0.05,1.25)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
-            else:
-                waktu = random.uniform(0.05,2.25)
-                print('delay', waktu,' detik')
-                time.sleep( waktu )
+        
 
         from_square_xy = selectors.algebraic_to_xy_selector(move.uci()[:2], is_flipped)
         to_square_xy = selectors.algebraic_to_xy_selector(move.uci()[2:], is_flipped)

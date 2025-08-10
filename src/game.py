@@ -8,17 +8,14 @@ import random
 import time # Import time module
 from src.engine import _parse_config_value
 
+import os
+import glob
+import chess.polyglot
+
 class Game:
     """
     Manages the game state and interaction.
     """
-    # A simple opening book mapping FEN strings to a list of UCI moves.
-    # This can be expanded with more openings and variations.
-    OPENING_BOOK = {
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1": ["e2e4", "d2d4", "g1f3", "c2c4"],
-        "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1": ["c7c5", "e7e5", "c7c6"],
-        "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1": ["g8f6", "d7d5", "c7c5"],
-    }
     def __init__(self, config, browser, stats, display_callback):
         self.config = config
         self.browser = browser
@@ -28,14 +25,44 @@ class Game:
         self.engine = StockfishEngine(config)
         self.automove = AutoMove(config, browser, stats, display_callback)
         self.color = None
+        self.opening_book_reader = None
+        self.book_paths = []
+
+        if self.config.getboolean("opening_book", "enabled"):
+            book_dir_name = self.config.get("opening_book", "directory")
+            # Construct path relative to the project root (assuming main.py is in a sub-directory like chess_assist)
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            book_dir_path = os.path.join(project_root, book_dir_name)
+
+            if os.path.isdir(book_dir_path):
+                self.book_paths = glob.glob(os.path.join(book_dir_path, "*.bin"))
+                if not self.book_paths:
+                    logging.warning(f"No .bin opening book files found in directory: {book_dir_path}")
+                else:
+                    logging.info(f"Found {len(self.book_paths)} opening book(s): {self.book_paths}")
+            else:
+                logging.warning(f"Opening book directory not found: {book_dir_path}")
 
     def start(self):
         """Starts the game loop."""
         self.board = chess.Board() # Reset the board for a new game
+
+        # Load a random opening book for this game
+        if self.book_paths:
+            selected_book_path = random.choice(self.book_paths)
+            try:
+                self.opening_book_reader = chess.polyglot.open_reader(selected_book_path)
+                logging.info(f"Using opening book for this game: {selected_book_path}")
+            except (OSError, ValueError) as e:
+                logging.error(f"Failed to load opening book '{selected_book_path}': {e}")
+                self.opening_book_reader = None
+        else:
+            self.opening_book_reader = None
+
+
         self.detect_color()
         if self.color == chess.WHITE:
             logging.info("Playing as WHITE, attempting to make first move...")
-            self.browser.page.wait_for_timeout(3000) # Add 3 second delay for first move as White
             self.play_best_move()
         self.track_moves()
 
@@ -230,6 +257,25 @@ class Game:
             logging.warning(f"Could not get remaining time from UI: {e}")
             return None # Return None if time cannot be retrieved
 
+    def _get_game_phase(self):
+        """
+        Determines the current game phase.
+        """
+        # Opening: less than 10 full moves (20 ply)
+        if self.board.fullmove_number < 10:
+            return "opening"
+        
+        # Endgame: simple piece count heuristic
+        # Count major and minor pieces for both sides
+        pieces = self.board.piece_map()
+        num_pieces = len(pieces)
+        
+        # A simple heuristic for endgame: if total number of pieces is less than 10 (e.g. 2 kings + 8 other pieces)
+        if num_pieces < 10:
+            return "endgame"
+            
+        return "middlegame"
+
     def play_best_move(self):
         """
         Calculates and plays the best move using the Stockfish engine.
@@ -237,26 +283,32 @@ class Game:
         try:
             move_start_time = time.time() # Start timing the move
 
-            # Check opening book first
-            current_fen = self.board.fen()
-            if current_fen in self.OPENING_BOOK:
-                possible_moves = self.OPENING_BOOK[current_fen]
-                # Filter out illegal moves from the opening book
-                legal_opening_moves = [
-                    move for move in possible_moves
-                    if chess.Move.from_uci(move) in self.board.legal_moves
-                ]
-                if legal_opening_moves:
-                    best_move_uci = random.choice(legal_opening_moves)
-                    best_move = chess.Move.from_uci(best_move_uci)
-                    logging.debug(f"Playing opening book move: {best_move_uci}")
-                else:
-                    logging.debug("No legal opening book moves found, falling back to engine.")
-                    best_move, moves_with_scores = self.engine.get_best_move(self.board)
-                    logging.info(f"Best move: {best_move.uci()}")
-            else:
-                best_move, moves_with_scores = self.engine.get_best_move(self.board)
-                logging.info(f"Best move: {best_move.uci()}")
+            # Determine game phase
+            game_phase = self._get_game_phase()
+            logging.info(f"Current game phase: {game_phase}")
+
+            # Use opening book if available and in opening phase
+            best_move = None
+            moves_with_scores = []
+            if game_phase == "opening" and self.opening_book_reader:
+                try:
+                    # Get a random move from the book for the current position
+                    book_move = self.opening_book_reader.get_random(self.board)
+                    if book_move:
+                        best_move = book_move.move
+                        logging.info(f"Playing opening book move: {best_move.uci()}")
+                except IndexError:
+                    # This can happen if there are no moves for the position in the book
+                    logging.debug("No move found in opening book for this position.")
+                    pass
+                except Exception as e:
+                    logging.error(f"Error reading opening book: {e}")
+
+
+            if best_move is None:
+                # If no book move, use the engine
+                best_move, moves_with_scores = self.engine.get_best_move(self.board, game_phase=game_phase)
+                logging.info(f"Best move from engine: {best_move.uci()}")
 
             if best_move is None:
                 logging.error("No best move found by the engine.")
@@ -268,27 +320,41 @@ class Game:
             # This delay is applied in addition to the random delay in automove.py
             additional_delay = 0
 
-            # Advanced Time Management
-            advanced_time_management = self.config.getboolean("play", "advanced_time_management")
-            if advanced_time_management:
-                remaining_time = self._get_remaining_time()
-                if remaining_time is not None:
-                    # Adjust delay based on remaining time
-                    # This is a simplified example; more sophisticated logic can be added.
-                    if remaining_time < 10: # Less than 10 seconds left
-                        logging.debug(f"Low time ({remaining_time}s). Reducing thinking time.")
-                        additional_delay = max(0, additional_delay - 0.3) # Reduce delay, ensure not negative
-                    elif remaining_time > 60: # More than 60 seconds left
-                        logging.debug(f"Plenty of time ({remaining_time}s). Increasing thinking time.")
-                        additional_delay += 0.5 # Add more delay
+            if self.board.ply() < 2:
+                logging.info("First move detected. Playing faster.")
+                additional_delay = random.uniform(1, 3) # 1-3 seconds delay
+            else:
+                # Advanced Time Management
+                advanced_time_management = self.config.getboolean("play", "advanced_time_management")
+                if advanced_time_management:
+                    remaining_time = self._get_remaining_time()
+                    if remaining_time is not None:
+                        delay_range = (0, 0) # (min, max)
+                        if remaining_time > 540: # > 9 minutes
+                            delay_range = (5, 15)
+                            logging.debug(f"Time > 9m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        elif remaining_time > 480: # 8-9 minutes
+                            delay_range = (4, 10)
+                            logging.debug(f"Time 8-9m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        elif remaining_time > 360: # 6-8 minutes
+                            delay_range = (3, 8)
+                            logging.debug(f"Time 6-8m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        elif remaining_time > 240: # 4-6 minutes
+                            delay_range = (2, 6)
+                            logging.debug(f"Time 4-6m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        elif remaining_time > 120: # 2-4 minutes
+                            delay_range = (1, 4)
+                            logging.debug(f"Time 2-4m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        elif remaining_time > 60: # 1-2 minutes
+                            delay_range = (0.5, 2)
+                            logging.debug(f"Time 1-2m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        else: # < 1 minute
+                            delay_range = (0.1, 0.5)
+                            logging.debug(f"Time < 1m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
+                        
+                        additional_delay += random.uniform(delay_range[0], delay_range[1])
 
-                # Add artificial random delay
-                min_art_delay = float(_parse_config_value(self.config.get("play", "min_artificial_move_delay_seconds")))
-                max_art_delay = float(_parse_config_value(self.config.get("play", "max_artificial_move_delay_seconds")))
-                if min_art_delay > 0 or max_art_delay > 0:
-                    random_artificial_delay = random.uniform(min_art_delay, max_art_delay)
-                    additional_delay += random_artificial_delay
-                    logging.debug(f"Added random artificial delay: {random_artificial_delay:.2f}s. Total additional delay: {additional_delay:.2f}s.")
+            
 
             if additional_delay > 0:
                 logging.debug(f"Applying total additional delay of {additional_delay:.2f}s.")
