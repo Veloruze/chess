@@ -6,32 +6,30 @@ from src import selectors
 from playwright.sync_api import Error, TimeoutError as PlaywrightTimeoutError
 import random
 import time # Import time module
-from src.engine import _parse_config_value
+from src.utils import _parse_config_value
 
 import os
 import glob
 import chess.polyglot
 
+import traceback
+
 class Game:
     """
     Manages the game state and interaction.
     """
-    def __init__(self, config, browser, stats, display_callback):
+    def __init__(self, config, browser, project_root):
         self.config = config
         self.browser = browser
-        self.stats = stats # Store stats object
-        self.display_callback = display_callback # Store display callback
         self.board = chess.Board()
         self.engine = StockfishEngine(config)
-        self.automove = AutoMove(config, browser, stats, display_callback)
+        self.automove = AutoMove(config, browser)
         self.color = None
         self.opening_book_reader = None
         self.book_paths = []
 
         if self.config.getboolean("opening_book", "enabled"):
-            book_dir_name = self.config.get("opening_book", "directory")
-            # Construct path relative to the project root (assuming main.py is in a sub-directory like chess_assist)
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            book_dir_name = _parse_config_value(self.config.get("opening_book", "directory"))
             book_dir_path = os.path.join(project_root, book_dir_name)
 
             if os.path.isdir(book_dir_path):
@@ -86,30 +84,7 @@ class Game:
 
     
 
-    def _update_stats_from_result(self, result_text):
-        """
-        Updates game statistics based on the game result text.
-        """
-        if result_text == "1-0": # White wins
-            if self.color == chess.WHITE:
-                self.stats.wins += 1
-            else:
-                self.stats.losses += 1
-        elif result_text == "0-1": # Black wins
-            if self.color == chess.BLACK:
-                self.stats.wins += 1
-            else:
-                self.stats.losses += 1
-        elif result_text == "1/2-1/2": # Draw
-            self.stats.draws += 1
-        else:
-            logging.warning(f"Unknown game result text: {result_text}")
-            return
-
-        # Update win rate
-        total_games = self.stats.wins + self.stats.losses + self.stats.draws
-        if total_games > 0:
-            self.stats.win_rate = (self.stats.wins / total_games) * 100
+    
 
     def track_moves(self):
         """Tracks moves made on the board."""
@@ -129,13 +104,11 @@ class Game:
             if game_result_element:
                 result_text = game_result_element.inner_text().strip()
                 logging.info(f"Game result element detected: {result_text}. Exiting track_moves.")
-                self._update_stats_from_result(result_text)
                 return # Exit track_moves if game result is found
 
             if self.board.is_game_over():
                 result = self.board.result()
                 logging.info(f"Game is over. Result: {result}")
-                self._update_stats_from_result(result)
                 return # Exit track_moves if game is over
             
             # Check for game over modal as an alternative way to detect game end
@@ -192,7 +165,6 @@ class Game:
                         if game_result_element_on_modal:
                             result_text = game_result_element_on_modal.inner_text().strip()
                             logging.info(f"Game result element detected within modal: {result_text}.")
-                            self._update_stats_from_result(result_text)
                         else:
                             logging.warning("Game over modal detected, but could not find game result element.")
                         return # Exit track_moves if game is over
@@ -235,7 +207,6 @@ class Game:
                 logging.warning(f"Could not parse SAN move: {san_move} on board FEN: {self.board.fen()}")
 
         if move_successfully_pushed:
-            self.display_callback() # Refresh HUD after a move is pushed
             logging.debug(f"Current board turn: {self.board.turn}, Player color: {self.color}")
             if self.board.turn == self.color:
                 self.play_best_move()
@@ -293,7 +264,7 @@ class Game:
             if game_phase == "opening" and self.opening_book_reader:
                 try:
                     # Get a random move from the book for the current position
-                    book_move = self.opening_book_reader.get_random(self.board)
+                    book_move = self.opening_book_reader.choice(self.board)
                     if book_move:
                         best_move = book_move.move
                         logging.info(f"Playing opening book move: {best_move.uci()}")
@@ -307,17 +278,20 @@ class Game:
 
             if best_move is None:
                 # If no book move, use the engine
-                best_move, moves_with_scores = self.engine.get_best_move(self.board, game_phase=game_phase)
-                logging.info(f"Best move from engine: {best_move.uci()}")
+                try:
+                    best_move, moves_with_scores = self.engine.get_best_move(self.board, game_phase=game_phase)
+                    logging.info(f"Best move from engine: {best_move.uci()}")
+                except TypeError as e:
+                    import traceback
+                    logging.error(f"A TypeError occurred inside get_best_move: {e}")
+                    traceback.print_exc()
+                    raise # Re-raise the exception to stop the program
 
             if best_move is None:
                 logging.error("No best move found by the engine.")
                 return
 
-            moves_with_scores = [] # Initialize moves_with_scores
-
             # Contextual thinking time
-            # This delay is applied in addition to the random delay in automove.py
             additional_delay = 0
 
             if self.board.ply() < 2:
@@ -332,29 +306,21 @@ class Game:
                         delay_range = (0, 0) # (min, max)
                         if remaining_time > 540: # > 9 minutes
                             delay_range = (5, 15)
-                            logging.debug(f"Time > 9m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         elif remaining_time > 480: # 8-9 minutes
                             delay_range = (4, 10)
-                            logging.debug(f"Time 8-9m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         elif remaining_time > 360: # 6-8 minutes
                             delay_range = (3, 8)
-                            logging.debug(f"Time 6-8m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         elif remaining_time > 240: # 4-6 minutes
                             delay_range = (2, 6)
-                            logging.debug(f"Time 4-6m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         elif remaining_time > 120: # 2-4 minutes
                             delay_range = (1, 4)
-                            logging.debug(f"Time 2-4m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         elif remaining_time > 60: # 1-2 minutes
                             delay_range = (0.5, 2)
-                            logging.debug(f"Time 1-2m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         else: # < 1 minute
                             delay_range = (0.1, 0.5)
-                            logging.debug(f"Time < 1m ({remaining_time}s). Delay: {delay_range[0]}-{delay_range[1]}s.")
                         
+                        logging.debug(f"Time-based delay range: {delay_range[0]}-{delay_range[1]}s.")
                         additional_delay += random.uniform(delay_range[0], delay_range[1])
-
-            
 
             if additional_delay > 0:
                 logging.debug(f"Applying total additional delay of {additional_delay:.2f}s.")

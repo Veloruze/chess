@@ -4,9 +4,8 @@ from src import selectors
 import re
 
 class ChessBrowser:
-    def __init__(self, config, stats):
+    def __init__(self, config):
         self.config = config
-        self.stats = stats # Store stats object
         self.playwright = None
         self.browser = None
         self.page = None
@@ -124,7 +123,7 @@ class ChessBrowser:
             raise
 
     def _extract_user_info(self):
-        """Extracts nickname and ELO rating from the current page and updates stats."""
+        """Extracts nickname and ELO rating from the current page."""
         try:
             # Wait for at least one of the nickname selectors to be visible
             # Use page.locator().or_().wait_for() for multiple XPath selectors
@@ -157,12 +156,7 @@ class ChessBrowser:
             else:
                 self.current_elo = "null"
 
-            self.stats.nickname = self.nickname
-            self.stats.current_elo = self.current_elo
-            if self.stats.start_elo == "null": # Set start ELO only once
-                self.stats.start_elo = self.current_elo
-
-            logging.debug(f"Extracted User Info: Nickname={self.nickname}, ELO={self.current_elo}")
+            logging.info(f"User: {self.nickname}, ELO: {self.current_elo}")
         except Exception as e:
             logging.warning(f"Could not extract user info: {e}")
             self.nickname = "null"

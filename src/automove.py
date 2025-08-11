@@ -9,11 +9,9 @@ class AutoMove:
     """
     Executes a move on the board.
     """
-    def __init__(self, config, browser, stats, display_callback):
+    def __init__(self, config, browser):
         self.config = config
         self.browser = browser
-        self.stats = stats
-        self.display_callback = display_callback
 
     def execute_move(self, move, letak_gerakan, is_flipped=False, move_duration=0.0):
         """
@@ -73,26 +71,20 @@ class AutoMove:
                 current_x = from_x + (to_x - from_x) * i / steps
                 current_y = from_y + (to_y - from_y) * i / steps
 
-                # Add a small random offset to simulate human-like imperfection and variability
-                # This offset is not applied to the final destination to ensure accuracy.
-                if i < steps: 
-                    current_x += random.uniform(-2, 2) # Random offset in X direction (e.g., -2 to +2 pixels)
-                    current_y += random.uniform(-2, 2) # Random offset in Y direction (e.g., -2 to +2 pixels)
+                
+
+                # Number of steps for the mouse movement. More steps mean smoother, but slower, movement.
+            steps = 5 
+            for i in range(steps + 1):
+                # Calculate intermediate coordinates along a straight line
+                current_x = from_x + (to_x - from_x) * i / steps
+                current_y = from_y + (to_y - from_y) * i / steps
 
                 self.browser.page.mouse.move(current_x, current_y)
                 # Small random delay between steps to make the movement less instantaneous
-                self.browser.page.wait_for_timeout(random.uniform(5, 20)) # Delay between 5 and 20 milliseconds
+                self.browser.page.wait_for_timeout(random.uniform(2, 8)) # Delay between 2 and 8 milliseconds
 
             self.browser.page.mouse.up()
-
-            # Update average move time
-            if move_duration > 0:
-                if self.stats.avg_move_time == 0.0:
-                    self.stats.avg_move_time = move_duration
-                else:
-                    self.stats.avg_move_time = (self.stats.avg_move_time + move_duration) / 2
-
-            self.display_callback() # Refresh HUD after a move is executed
 
             logging.debug(f"Successfully dragged from {from_selector} to {to_selector}")
         except Exception as e:
