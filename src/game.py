@@ -278,14 +278,8 @@ class Game:
 
             if best_move is None:
                 # If no book move, use the engine
-                try:
-                    best_move, moves_with_scores = self.engine.get_best_move(self.board, game_phase=game_phase)
-                    logging.info(f"Best move from engine: {best_move.uci()}")
-                except TypeError as e:
-                    import traceback
-                    logging.error(f"A TypeError occurred inside get_best_move: {e}")
-                    traceback.print_exc()
-                    raise # Re-raise the exception to stop the program
+                best_move, moves_with_scores = self.engine.get_best_move(self.board, game_phase=game_phase)
+                logging.info(f"Best move from engine: {best_move.uci()}")
 
             if best_move is None:
                 logging.error("No best move found by the engine.")

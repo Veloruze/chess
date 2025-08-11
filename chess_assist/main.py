@@ -13,8 +13,6 @@ from src.game import Game
 CREDENTIALS_FILE = "credentials.txt"
 from src.utils import _parse_config_value
 
-
-
 def get_credentials(project_root):
     username = ""
     password = ""
@@ -130,6 +128,7 @@ def main():
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
+        traceback.print_exc()
     finally:
         browser.close()
 
@@ -176,4 +175,5 @@ def handle_game_over_modal(browser_instance, game_mode, config):
 
 
 if __name__ == "__main__":
+    import traceback
     main()
