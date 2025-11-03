@@ -13,13 +13,65 @@ class ChessBrowser:
         self.current_elo = "null"
 
     def start(self):
-        """Starts the browser and creates a new page."""
-        logging.debug("Starting browser...")
+        """Starts the browser with anti-detection features."""
+        logging.debug("Starting browser with stealth mode...")
         self.playwright = sync_playwright().start()
+
+        # Launch browser with anti-automation flags
         self.browser = self.playwright.chromium.launch(
             headless=self.config.getboolean("play", "headless"),
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--window-size=1920,1080',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-default-browser-check',
+            ]
         )
+
         self.page = self.browser.new_page()
+
+        # Inject stealth scripts to mask automation
+        self.page.add_init_script("""
+            // Remove webdriver property
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+
+            // Spoof Chrome user agent
+            Object.defineProperty(navigator, 'userAgent', {
+                get: () => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            });
+
+            // Add realistic plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+
+            // Spoof languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+
+            // Add chrome property
+            window.chrome = {
+                runtime: {}
+            };
+
+            // Spoof permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+        """)
+
+        logging.info("Browser started with anti-detection features enabled")
 
     def login(self, username, password):
         """Logs into chess.com."""

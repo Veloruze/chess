@@ -7,23 +7,88 @@ from src import selectors
 
 class AutoMove:
     """
-    Executes a move on the board.
+    Executes a move on the board with human-like behavior.
     """
     def __init__(self, config, browser):
         self.config = config
         self.browser = browser
 
+    def _human_mouse_move(self, from_x, from_y, to_x, to_y):
+        """
+        Simulate human-like mouse movement using Bezier curves with jitter.
+        """
+        # Calculate distance
+        distance = math.sqrt((to_x - from_x)**2 + (to_y - from_y)**2)
+
+        # Dynamic steps based on distance (more steps = smoother but slower)
+        steps = max(10, int(distance / 15) + random.randint(3, 8))
+
+        # Generate Bezier curve control points with randomness
+        control_x1 = from_x + (to_x - from_x) * random.uniform(0.2, 0.4)
+        control_y1 = from_y + (to_y - from_y) * random.uniform(0.2, 0.4) + random.randint(-30, 30)
+
+        control_x2 = from_x + (to_x - from_x) * random.uniform(0.6, 0.8)
+        control_y2 = from_y + (to_y - from_y) * random.uniform(0.6, 0.8) + random.randint(-30, 30)
+
+        logging.debug(f"Human mouse movement: {steps} steps from ({from_x:.1f}, {from_y:.1f}) to ({to_x:.1f}, {to_y:.1f})")
+
+        for i in range(steps + 1):
+            t = i / steps
+
+            # Cubic Bezier curve formula
+            x = ((1-t)**3 * from_x +
+                 3*(1-t)**2*t * control_x1 +
+                 3*(1-t)*t**2 * control_x2 +
+                 t**3 * to_x)
+
+            y = ((1-t)**3 * from_y +
+                 3*(1-t)**2*t * control_y1 +
+                 3*(1-t)*t**2 * control_y2 +
+                 t**3 * to_y)
+
+            # Add micro-jitter (simulates human hand shake)
+            jitter_x = random.uniform(-1.5, 1.5)
+            jitter_y = random.uniform(-1.5, 1.5)
+
+            self.browser.page.mouse.move(x + jitter_x, y + jitter_y)
+
+            # Variable speed (slower at start/end, faster in middle)
+            # This simulates human acceleration/deceleration
+            if t < 0.25 or t > 0.75:
+                delay = random.uniform(12, 25)  # Slower at endpoints
+            else:
+                delay = random.uniform(6, 15)   # Faster in middle
+
+            self.browser.page.wait_for_timeout(delay)
+
+    def _add_overshoot_correction(self, target_x, target_y):
+        """
+        Occasionally overshoot target and correct (15% chance).
+        Simulates human imprecision.
+        """
+        if random.random() < 0.15:  # 15% chance
+            logging.debug("Adding overshoot correction")
+
+            # Overshoot by small amount
+            overshoot_x = target_x + random.uniform(-8, 8)
+            overshoot_y = target_y + random.uniform(-8, 8)
+
+            self.browser.page.mouse.move(overshoot_x, overshoot_y)
+            self.browser.page.wait_for_timeout(random.uniform(40, 100))
+
+            # Correct back to target
+            self.browser.page.mouse.move(target_x, target_y)
+            self.browser.page.wait_for_timeout(random.uniform(30, 80))
+
     def execute_move(self, move, letak_gerakan, is_flipped=False, move_duration=0.0):
         """
-        Executes a move on the board.
+        Executes a move on the board with human-like mouse behavior.
         """
         logging.debug(f"automove.execute_move received is_flipped: {is_flipped}")
         auto_move_enabled = self.config.getboolean("play", "auto_move")
         logging.debug(f"Auto-move enabled: {auto_move_enabled}")
         if not auto_move_enabled:
             return
-
-        
 
         from_square_xy = selectors.algebraic_to_xy_selector(move.uci()[:2], is_flipped)
         to_square_xy = selectors.algebraic_to_xy_selector(move.uci()[2:], is_flipped)
@@ -57,35 +122,41 @@ class AutoMove:
             to_x = to_box['x'] + to_box['width'] / 2
             to_y = to_box['y'] + to_box['height'] / 2
 
-            # Perform drag and drop with human-like mouse movement
-            # This involves moving the mouse in small steps with random offsets and delays
-            # to simulate a less robotic and more natural mouse trajectory.
-            self.browser.page.mouse.move(from_x, from_y)
+            # Move to start position with human-like movement
+            current_pos = self.browser.page.evaluate("() => ({ x: window.innerWidth / 2, y: window.innerHeight / 2 })")
+            current_x = current_pos.get('x', from_x)
+            current_y = current_pos.get('y', from_y)
+
+            self._human_mouse_move(current_x, current_y, from_x, from_y)
+
+            # Small hover before clicking (human hesitation)
+            hover_delay = random.uniform(80, 300)
+            self.browser.page.wait_for_timeout(hover_delay)
+
+            # Click and hold
             self.browser.page.mouse.down()
-            self.browser.page.wait_for_timeout(100) # Small initial delay for visual effect
+            hold_delay = random.uniform(50, 180)
+            self.browser.page.wait_for_timeout(hold_delay)
 
-            # Number of steps for the mouse movement. More steps mean smoother, but slower, movement.
-            steps = 10 
-            for i in range(steps + 1):
-                # Calculate intermediate coordinates along a straight line
-                current_x = from_x + (to_x - from_x) * i / steps
-                current_y = from_y + (to_y - from_y) * i / steps
+            # Occasional mid-drag hesitation (5% chance)
+            if random.random() < 0.05:
+                logging.debug("Adding mid-drag hesitation")
+                mid_x = (from_x + to_x) / 2 + random.uniform(-20, 20)
+                mid_y = (from_y + to_y) / 2 + random.uniform(-20, 20)
+                self._human_mouse_move(from_x, from_y, mid_x, mid_y)
+                self.browser.page.wait_for_timeout(random.uniform(200, 600))
 
-                
+            # Complete drag with Bezier curve
+            self._human_mouse_move(from_x, from_y, to_x, to_y)
 
-                # Number of steps for the mouse movement. More steps mean smoother, but slower, movement.
-            steps = 5 
-            for i in range(steps + 1):
-                # Calculate intermediate coordinates along a straight line
-                current_x = from_x + (to_x - from_x) * i / steps
-                current_y = from_y + (to_y - from_y) * i / steps
+            # Add overshoot correction (15% chance)
+            self._add_overshoot_correction(to_x, to_y)
 
-                self.browser.page.mouse.move(current_x, current_y)
-                # Small random delay between steps to make the movement less instantaneous
-                self.browser.page.wait_for_timeout(random.uniform(2, 8)) # Delay between 2 and 8 milliseconds
-
+            # Drop with slight delay
+            drop_delay = random.uniform(40, 150)
+            self.browser.page.wait_for_timeout(drop_delay)
             self.browser.page.mouse.up()
 
-            logging.debug(f"Successfully dragged from {from_selector} to {to_selector}")
+            logging.debug(f"Successfully executed human-like drag from {from_selector} to {to_selector}")
         except Exception as e:
-            logging.error(f"Terjadi kesalahan saat melakukan gerakan otomatis: {e}. From selector: {from_selector}, To selector: {to_selector}")
+            logging.error(f"Error during automated move execution: {e}. From: {from_selector}, To: {to_selector}")
