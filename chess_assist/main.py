@@ -7,11 +7,15 @@ import time
 import random
 import datetime
 
+# Add parent directory to path to allow imports from src/
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
 from src.browser import ChessBrowser
 from src.game import Game
+from src.utils import _parse_config_value
 
 CREDENTIALS_FILE = "credentials.txt"
-from src.utils import _parse_config_value
 
 def get_credentials(project_root):
     username = ""
