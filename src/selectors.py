@@ -23,16 +23,6 @@ TIME_CONTROL_SELECTORS = {
 PLAY_BUTTON_SELECTORS = [
     "[data-cy='new-game-index-play']",  # Most reliable - data-cy attribute
     "button:has-text('Start Game')",     # Current UI text
-    "button.cc-button-primary:has-text('Start Game')",
-    "button:has-text('Play')",
-    "button:has-text('Start')",
-    "[data-cy='quick-play']",
-    "button.ui_v5-button-component.ui_v5-button-primary",
-    "button.ui_v5-button-primary",
-    "button[aria-label='Play']",
-    ".play-button",
-    ".quick-play-button",
-    "button.play-button-component",
 ]
 
 BOARD_SELECTOR = ".board"
