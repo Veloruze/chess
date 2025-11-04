@@ -181,15 +181,32 @@ class ChessBrowser:
         clicked_play_button = False
         for selector in selectors.PLAY_BUTTON_SELECTORS:
             try:
-                with self.page.expect_navigation():
-                    self.page.click(selector, timeout=5000)
-                clicked_play_button = True
-                break
-            except Exception:
-                logging.debug(f"Could not click play button with selector: {selector}")
+                # First check if element exists
+                if self.page.query_selector(selector):
+                    logging.debug(f"Found play button with selector: {selector}")
+                    with self.page.expect_navigation(timeout=10000):
+                        self.page.click(selector, timeout=5000)
+                    clicked_play_button = True
+                    break
+                else:
+                    logging.debug(f"Play button not found with selector: {selector}")
+            except Exception as e:
+                logging.debug(f"Could not click play button with selector: {selector}, error: {e}")
 
         if not clicked_play_button:
-            logging.error("Failed to find and click any play button.")
+            # Take screenshot for debugging
+            screenshot_path = "play_button_failure.png"
+            self.page.screenshot(path=screenshot_path)
+
+            # Log all available buttons for debugging
+            try:
+                all_buttons = self.page.query_selector_all("button")
+                button_texts = [btn.inner_text() for btn in all_buttons[:10]]  # First 10 buttons
+                logging.error(f"Available buttons: {button_texts}")
+            except Exception:
+                pass
+
+            logging.error(f"Failed to find and click any play button. Screenshot saved to {screenshot_path}")
             raise Exception("Play button not found.")
 
         try:
