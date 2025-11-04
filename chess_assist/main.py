@@ -116,14 +116,17 @@ def main():
             games_played += 1
             logging.info(f"Starting game {games_played}...")
 
-            browser.select_mode() # This needs to be called for each new game
-            game.start() # This needs to be modified to return when game is over
+            # Only select mode for first game. Subsequent games start automatically after clicking "New Game"
+            if games_played == 1:
+                browser.select_mode()
+
+            game.start()
 
             logging.info(f"Game {games_played} finished.")
 
             if config_auto_play:
                 # Handle game over modal and click new game button
-                if not handle_game_over_modal(browser, config_mode, config): # New function
+                if not handle_game_over_modal(browser, config_mode, config):
                     logging.info("Could not find game over modal or new game button. Stopping auto-play.")
                     break
                 logging.info("Starting next game...")
