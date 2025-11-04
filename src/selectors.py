@@ -29,8 +29,14 @@ BOARD_SELECTOR = ".board"
 
 # Game over/re-arm selectors
 NEW_GAME_BUTTON_SELECTORS = [
-    "button:has-text('New Game')",
-    "button:has-text('New 3 min')", # Specific to the screenshot
+    "[data-cy='game-over-modal-new-game-button']",  # Most reliable
+    "button:has-text('New 3 min')",
+    "button:has-text('New 1 min')",
+    "button:has-text('New 10 min')",
+]
+
+REMATCH_BUTTON_SELECTORS = [
+    "[data-cy='game-over-modal-rematch-button']",
     "button:has-text('Rematch')",
 ]
 

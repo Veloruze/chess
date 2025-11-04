@@ -14,6 +14,7 @@ sys.path.insert(0, PROJECT_ROOT)
 from src.browser import ChessBrowser
 from src.game import Game
 from src.utils import _parse_config_value
+from src.selectors import NEW_GAME_BUTTON_SELECTORS
 
 CREDENTIALS_FILE = "credentials.txt"
 
@@ -142,26 +143,11 @@ def handle_game_over_modal(browser_instance, game_mode, config):
         game_over_modal = browser_instance.page.wait_for_selector(".game-over-modal-content", timeout=10000)
         logging.info("Game over modal detected.")
 
-        # Determine the text for the new game button based on the mode
-        button_text = ""
-        game_mode_lower = game_mode.lower()
-        if game_mode_lower == "bullet":
-            button_text = "New 1 min"
-        elif game_mode_lower == "blitz":
-            button_text = "New 3 min"
-        elif game_mode_lower == "rapid":
-            button_text = "New 10 min"
-        else:
-            logging.warning(f"Unknown game mode: {game_mode}. Cannot determine new game button text.")
-            return False
-
-        # Click the new game button within the modal
-        new_game_button_selector = f"button:has-text('{button_text}')"
-        
         # Get delay from config
+        game_mode_lower = game_mode.lower()
         min_delay_key = f"min_{game_mode_lower}_delay_seconds"
         max_delay_key = f"max_{game_mode_lower}_delay_seconds"
-        
+
         min_delay = int(_parse_config_value(config.get("delays", min_delay_key, fallback="10")))
         max_delay = int(_parse_config_value(config.get("delays", max_delay_key, fallback="30")))
 
@@ -169,9 +155,25 @@ def handle_game_over_modal(browser_instance, game_mode, config):
         logging.info(f"Waiting for {delay} seconds before starting a new game...")
         time.sleep(delay)
 
-        logging.info(f"Attempting to click new game button: {new_game_button_selector}")
-        browser_instance.page.click(new_game_button_selector, timeout=5000)
-        logging.info(f"Successfully clicked {button_text} button.")
+        # Try each selector until one works
+        clicked = False
+        for selector in NEW_GAME_BUTTON_SELECTORS:
+            try:
+                elem = browser_instance.page.query_selector(selector)
+                if elem:
+                    logging.info(f"Found new game button with selector: {selector}")
+                    elem.click()
+                    logging.info("Successfully clicked new game button.")
+                    clicked = True
+                    break
+            except Exception as e:
+                logging.debug(f"Selector {selector} failed: {e}")
+                continue
+
+        if not clicked:
+            logging.error("Could not find new game button with any selector")
+            return False
+
         return True
     except Exception as e:
         logging.error(f"Error handling game over modal: {e}")
