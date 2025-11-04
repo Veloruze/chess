@@ -28,13 +28,14 @@ class HumanDelays:
 
             logging.info("Human delays module initialized with exponential distribution")
 
-    def get_thinking_delay(self, game_phase="middlegame", move_complexity=1.0):
+    def get_thinking_delay(self, game_phase="middlegame", move_complexity=1.0, game_mode="Blitz"):
         """
         Calculate human-like thinking delay using exponential distribution.
 
         Args:
             game_phase: Opening, middlegame, or endgame
             move_complexity: Multiplier for complex positions (1.0 = normal)
+            game_mode: Game mode (Bullet, Blitz, Rapid) for time-appropriate delays
 
         Returns:
             Delay in seconds
@@ -42,10 +43,30 @@ class HumanDelays:
         if not self.enabled:
             return 0
 
+        # Define maximum delays based on game mode (realistic for humans)
+        mode_limits = {
+            "Bullet": {"max": 3.0, "deep_thought_max": 5.0},   # 1 min games - must move fast
+            "Blitz": {"max": 6.0, "deep_thought_max": 10.0},   # 3 min games - moderate thinking
+            "Rapid": {"max": 20.0, "deep_thought_max": 45.0}   # 10+ min games - can think longer
+        }
+
+        limits = mode_limits.get(game_mode, mode_limits["Blitz"])
+
         # Check for deep thought pause (rare but realistic)
-        if random.random() < self.deep_thought_prob:
-            delay = random.uniform(self.min_deep_thought, self.max_deep_thought)
-            logging.info(f"Deep thought pause: {delay:.1f}s")
+        # Probability reduced for faster time controls
+        deep_thought_prob = self.deep_thought_prob
+        if game_mode == "Bullet":
+            deep_thought_prob *= 0.1  # Very rare in bullet (0.8%)
+        elif game_mode == "Blitz":
+            deep_thought_prob *= 0.3  # Less frequent in blitz (2.4%)
+
+        if random.random() < deep_thought_prob:
+            # Use mode-appropriate deep thought duration
+            delay = random.uniform(
+                limits["max"] * 0.5,  # At least half of max
+                limits["deep_thought_max"]
+            )
+            logging.info(f"Deep thought pause: {delay:.1f}s (mode: {game_mode})")
             return delay
 
         # Use exponential distribution for base thinking time
@@ -58,33 +79,35 @@ class HumanDelays:
 
         # Adjust based on game phase
         phase_multipliers = {
-            "opening": 0.7,      # Faster in opening (theory moves)
-            "middlegame": 1.2,   # Longer in middlegame (tactical)
-            "endgame": 1.0       # Normal in endgame
+            "opening": 0.5,      # Much faster in opening (theory moves)
+            "middlegame": 1.0,   # Normal in middlegame (tactical)
+            "endgame": 0.8       # Faster in endgame (fewer pieces)
         }
         delay *= phase_multipliers.get(game_phase, 1.0)
 
         # Apply complexity multiplier
         delay *= move_complexity
 
-        # Clamp to reasonable bounds (1-60 seconds)
-        delay = max(1.0, min(60.0, delay))
+        # Clamp to mode-appropriate bounds
+        min_delay = 0.5 if game_mode != "Bullet" else 0.3
+        delay = max(min_delay, min(limits["max"], delay))
 
-        logging.debug(f"Calculated thinking delay: {delay:.2f}s (phase: {game_phase}, complexity: {move_complexity:.1f})")
+        logging.debug(f"Calculated thinking delay: {delay:.2f}s (mode: {game_mode}, phase: {game_phase}, complexity: {move_complexity:.1f})")
         return delay
 
-    def apply_thinking_delay(self, game_phase="middlegame", move_complexity=1.0):
+    def apply_thinking_delay(self, game_phase="middlegame", move_complexity=1.0, game_mode="Blitz"):
         """
         Apply the calculated thinking delay with micro-variations.
 
         Args:
             game_phase: Current game phase
             move_complexity: Position complexity multiplier
+            game_mode: Game mode for time-appropriate delays
         """
         if not self.enabled:
             return
 
-        delay = self.get_thinking_delay(game_phase, move_complexity)
+        delay = self.get_thinking_delay(game_phase, move_complexity, game_mode)
 
         # Split delay into chunks to simulate human "thinking process"
         # e.g., look at board, think, check clock, think more

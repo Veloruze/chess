@@ -308,8 +308,11 @@ class Game:
                 elif num_legal_moves < 10:
                     move_complexity = 0.8  # Simple position
 
+                # Get game mode from config
+                game_mode = self.config.get("play", "mode", fallback="Blitz")
+
                 # Apply human-like delay with exponential distribution
-                self.human_delays.apply_thinking_delay(game_phase, move_complexity)
+                self.human_delays.apply_thinking_delay(game_phase, move_complexity, game_mode)
 
                 # Also consider remaining time (Advanced Time Management)
                 advanced_time_management = self.config.getboolean("play", "advanced_time_management")
