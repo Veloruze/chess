@@ -178,18 +178,26 @@ class ChessBrowser:
             logging.error(f"Could not click time control {mode}: {e}")
             raise
 
+        # Wait a bit for the play button to appear after time control selection
+        import time
+        time.sleep(1)
+
         clicked_play_button = False
+
+        # Try each selector with wait
         for selector in selectors.PLAY_BUTTON_SELECTORS:
             try:
-                # First check if element exists
-                if self.page.query_selector(selector):
-                    logging.debug(f"Found play button with selector: {selector}")
-                    with self.page.expect_navigation(timeout=10000):
-                        self.page.click(selector, timeout=5000)
-                    clicked_play_button = True
-                    break
-                else:
-                    logging.debug(f"Play button not found with selector: {selector}")
+                # Wait for the button to be visible
+                self.page.wait_for_selector(selector, state="visible", timeout=3000)
+                logging.debug(f"Found play button with selector: {selector}")
+
+                # Click and wait for navigation
+                with self.page.expect_navigation(timeout=15000):
+                    self.page.click(selector, timeout=5000)
+
+                clicked_play_button = True
+                logging.info(f"Successfully clicked play button with selector: {selector}")
+                break
             except Exception as e:
                 logging.debug(f"Could not click play button with selector: {selector}, error: {e}")
 

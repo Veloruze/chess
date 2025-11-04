@@ -23,9 +23,14 @@ TIME_CONTROL_SELECTORS = {
 PLAY_BUTTON_SELECTORS = [
     "button:has-text('Play')",
     "button:has-text('Start Game')",
+    "button:has-text('Start')",
     ".play-button",
     "button.ui_v5-button-component.ui_v5-button-primary",
+    "button.ui_v5-button-primary",
     "button[aria-label='Play']",
+    "[data-cy='quick-play']",
+    ".quick-play-button",
+    "button.play-button-component",
 ]
 
 BOARD_SELECTOR = ".board"
