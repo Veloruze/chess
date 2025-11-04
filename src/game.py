@@ -75,7 +75,12 @@ class Game:
     def detect_color(self):
         """Detects the player's color and extracts user info."""
         logging.debug("Detecting color...")
-        board_element = self.browser.page.wait_for_selector(selectors.BOARD_SELECTOR)
+        logging.info("Waiting for matchmaking and game board to load...")
+
+        # Wait for board with extended timeout to allow for matchmaking
+        # Matchmaking can take 10-60+ seconds depending on rating/time
+        board_element = self.browser.page.wait_for_selector(selectors.BOARD_SELECTOR, timeout=120000)  # 2 minutes
+        logging.info("Game board loaded, opponent found!")
         self.browser._extract_user_info() # Extract user info now that the game board is loaded
         class_name = board_element.get_attribute("class")
         if "flipped" in class_name:
