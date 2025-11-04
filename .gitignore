@@ -1,2 +1,45 @@
+# Credentials
 credentials.txt
-login_failure.png 
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and debug files
+*.log
+*.png
+*.jpg
+*.jpeg
+
+# Playwright browsers
+.playwright/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code
+.claude/settings.local.json
+
+# Temporary files
+chromedriver.exe
+geckodriver.exe
+*.tmp
+*.temp

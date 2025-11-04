@@ -1,8 +1,3 @@
-USER_TAGLINE_USERNAME_SELECTOR = 'xpath=/html/body/div[4]/div[3]/div[2]/div[2]/div/div[1]';
-CC_USER_USERNAME_SELECTOR = 'xpath=/html/body/div[4]/div[3]/div[2]/div[2]/div/div[1]'; # Using the same XPath for username as it's likely the same element
-CC_USER_RATING_SELECTOR_WHITE = 'xpath=/html/body/div[4]/div[3]/div[2]/div[2]/div/div[2]';
-CC_USER_RATING_SELECTOR_BLACK = 'xpath=/html/body/div[4]/div[3]/div[2]/div[2]/div/div[2]'; # Using the same XPath for ELO as it's likely the same element
-
 # src/selectors.py
 
 LOGIN_USERNAME_INPUT = "#login-username"
