@@ -12,11 +12,26 @@ class AutoMove:
     def __init__(self, config, browser):
         self.config = config
         self.browser = browser
+        self.fast_mode = False  # Flag for fast movement in time pressure
 
     def _human_mouse_move(self, from_x, from_y, to_x, to_y):
         """
         Simulate human-like mouse movement using Bezier curves with jitter.
+        Uses fast mode when in time pressure.
         """
+        # FAST MODE: Simplified movement for time pressure
+        if self.fast_mode:
+            # Direct linear movement with minimal steps
+            steps = 5  # Much fewer steps
+            for i in range(steps + 1):
+                t = i / steps
+                x = from_x + (to_x - from_x) * t
+                y = from_y + (to_y - from_y) * t
+                self.browser.page.mouse.move(x, y)
+                self.browser.page.wait_for_timeout(2)  # Minimal delay (2ms)
+            return
+
+        # NORMAL MODE: Full Bezier curve animation
         # Calculate distance
         distance = math.sqrt((to_x - from_x)**2 + (to_y - from_y)**2)
 
@@ -129,33 +144,43 @@ class AutoMove:
 
             self._human_mouse_move(current_x, current_y, from_x, from_y)
 
-            # Small hover before clicking (human hesitation)
-            hover_delay = random.uniform(80, 300)
-            self.browser.page.wait_for_timeout(hover_delay)
+            if self.fast_mode:
+                # FAST MODE: Minimal delays
+                self.browser.page.wait_for_timeout(10)  # Tiny hover
+                self.browser.page.mouse.down()
+                self.browser.page.wait_for_timeout(10)  # Tiny hold
+                self._human_mouse_move(from_x, from_y, to_x, to_y)  # Fast linear drag
+                self.browser.page.wait_for_timeout(10)  # Tiny drop delay
+                self.browser.page.mouse.up()
+            else:
+                # NORMAL MODE: Full human-like animation
+                # Small hover before clicking (human hesitation)
+                hover_delay = random.uniform(80, 300)
+                self.browser.page.wait_for_timeout(hover_delay)
 
-            # Click and hold
-            self.browser.page.mouse.down()
-            hold_delay = random.uniform(50, 180)
-            self.browser.page.wait_for_timeout(hold_delay)
+                # Click and hold
+                self.browser.page.mouse.down()
+                hold_delay = random.uniform(50, 180)
+                self.browser.page.wait_for_timeout(hold_delay)
 
-            # Occasional mid-drag hesitation (5% chance)
-            if random.random() < 0.05:
-                logging.debug("Adding mid-drag hesitation")
-                mid_x = (from_x + to_x) / 2 + random.uniform(-20, 20)
-                mid_y = (from_y + to_y) / 2 + random.uniform(-20, 20)
-                self._human_mouse_move(from_x, from_y, mid_x, mid_y)
-                self.browser.page.wait_for_timeout(random.uniform(200, 600))
+                # Occasional mid-drag hesitation (5% chance)
+                if random.random() < 0.05:
+                    logging.debug("Adding mid-drag hesitation")
+                    mid_x = (from_x + to_x) / 2 + random.uniform(-20, 20)
+                    mid_y = (from_y + to_y) / 2 + random.uniform(-20, 20)
+                    self._human_mouse_move(from_x, from_y, mid_x, mid_y)
+                    self.browser.page.wait_for_timeout(random.uniform(200, 600))
 
-            # Complete drag with Bezier curve
-            self._human_mouse_move(from_x, from_y, to_x, to_y)
+                # Complete drag with Bezier curve
+                self._human_mouse_move(from_x, from_y, to_x, to_y)
 
-            # Add overshoot correction (15% chance)
-            self._add_overshoot_correction(to_x, to_y)
+                # Add overshoot correction (15% chance)
+                self._add_overshoot_correction(to_x, to_y)
 
-            # Drop with slight delay
-            drop_delay = random.uniform(40, 150)
-            self.browser.page.wait_for_timeout(drop_delay)
-            self.browser.page.mouse.up()
+                # Drop with slight delay
+                drop_delay = random.uniform(40, 150)
+                self.browser.page.wait_for_timeout(drop_delay)
+                self.browser.page.mouse.up()
 
             logging.debug(f"Successfully executed human-like drag from {from_selector} to {to_selector}")
         except Exception as e:

@@ -320,20 +320,26 @@ class Game:
                     if remaining_time is not None:
                         # Time pressure thresholds - kick in early to prevent timeout
                         if remaining_time < 30:
-                            # CRITICAL: Play instantly
+                            # CRITICAL: Play instantly + fast mouse
                             logging.warning(f"CRITICAL TIME: {remaining_time}s - Playing instantly!")
                             time.sleep(random.uniform(0.1, 0.3))
                             use_fast_mode = True
+                            self.automove.fast_mode = True  # Enable fast mouse movement
                         elif remaining_time < 60:
-                            # URGENT: Play very fast
+                            # URGENT: Play very fast + fast mouse
                             logging.info(f"URGENT TIME: {remaining_time}s - Playing very fast")
                             time.sleep(random.uniform(0.3, 0.8))
                             use_fast_mode = True
+                            self.automove.fast_mode = True  # Enable fast mouse movement
                         elif remaining_time < 90 and game_mode in ["Blitz", "Bullet"]:
                             # LOW TIME: Play faster in fast modes
                             logging.info(f"LOW TIME: {remaining_time}s - Playing faster")
                             time.sleep(random.uniform(0.5, 1.5))
                             use_fast_mode = True
+                            # Keep normal mouse movement for this threshold
+                        else:
+                            # Normal time: Disable fast mode
+                            self.automove.fast_mode = False
 
                 # Only apply normal delays if NOT in time pressure
                 if not use_fast_mode:
