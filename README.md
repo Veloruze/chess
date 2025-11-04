@@ -34,6 +34,13 @@
 
 *   **♟️ Hyper-Realistic Playstyle:** Forget rigid bots. With **Dynamic Depth & Nodes**, **Blunder Logic**, and **Advanced Time Management**, this bot mimics the thought process, inconsistencies, and even the subtle mistakes of a human player, making it nearly indistinguishable from a real person.
 
+*   **🛡️ Advanced Anti-Detection (5-Phase System):**
+    *   **Phase 1:** Browser stealth mode + Bezier curve mouse movement
+    *   **Phase 2:** Exponential thinking delays with occasional "deep thought" pauses
+    *   **Phase 3:** Idle actions during opponent's turn (random mouse movements, piece hovering)
+    *   **Phase 4:** Randomized viewport size and zoom levels
+    *   **Phase 5:** Human-like typing patterns with occasional typos and corrections
+
 *   **📚 Dynamic Opening Book:** Never play the same opening twice. Simply drop your Polyglot (`.bin`) opening book files into the `opening_books` directory, and the bot will automatically detect and randomly choose one for each game.
 
 *   **⚙️ Full Control at Your Fingertips:** Every engine parameter, from the **target Elo** to the level of "aggressiveness" (`Contempt`), is easily configurable through a single, well-documented `config.ini` file. You are the coach.
@@ -162,6 +169,46 @@ Click on each section to expand and see a detailed explanation of every paramete
 -   `enabled`: Enable (`true`) or disable (`false`) this feature.
 -   `max_score_diff_cp`: The maximum score difference (in centipawns) to consider making a "blunder."
 -   `min/max_blunder_chance`: The probability range (e.g., `0.05` = 5%) of making a blunder if the score difference is within the limit.
+
+</details>
+
+<details>
+<summary><strong>[human_delays] - Phase 2: Human-like Thinking Delays</strong></summary>
+
+-   `enabled`: Enable exponential distribution for thinking time (`true`/`false`).
+-   `min/max_base_thinking_time`: Base thinking time range in seconds.
+-   `exponential_lambda`: Lambda parameter for exponential distribution (higher = faster decay).
+-   `deep_thought_probability`: Probability of occasional long pauses (0.0-1.0).
+-   `min/max_deep_thought_duration`: Duration range for deep thought pauses in seconds.
+
+</details>
+
+<details>
+<summary><strong>[idle_actions] - Phase 3: Random Mouse Movements</strong></summary>
+
+-   `enabled`: Enable idle actions during opponent's turn (`true`/`false`).
+-   `action_probability`: Probability of performing an idle action (0.0-1.0).
+-   `action_types`: Comma-separated list of action types (random_move, piece_hover, board_scan, tab_check).
+
+</details>
+
+<details>
+<summary><strong>[viewport] - Phase 4: Viewport Randomization</strong></summary>
+
+-   `randomize_window_size`: Randomize window size on each session (`true`/`false`).
+-   `min/max_window_width`: Allowed window width range in pixels.
+-   `min/max_window_height`: Allowed window height range in pixels.
+-   `randomize_zoom`: Randomize viewport zoom level 90-110% (`true`/`false`).
+
+</details>
+
+<details>
+<summary><strong>[typing_patterns] - Phase 5: Human-like Typing</strong></summary>
+
+-   `enabled`: Enable human-like typing patterns (`true`/`false`).
+-   `min/max_typing_speed_cpm`: Characters per minute range (average human speed).
+-   `typo_probability`: Probability of making a typo (0.0-1.0).
+-   `min/max_correction_delay`: Delay before correcting typo in seconds.
 
 </details>
 

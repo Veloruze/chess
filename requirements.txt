@@ -1,3 +1,4 @@
 playwright
 python-chess
 configparser
+numpy

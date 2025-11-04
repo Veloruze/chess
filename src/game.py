@@ -2,6 +2,8 @@ import logging
 import chess
 from src.engine import StockfishEngine
 from src.automove import AutoMove
+from src.human_delays import HumanDelays
+from src.idle_actions import IdleActions
 from src import selectors
 from playwright.sync_api import Error, TimeoutError as PlaywrightTimeoutError
 import random
@@ -24,6 +26,8 @@ class Game:
         self.board = chess.Board()
         self.engine = StockfishEngine(config)
         self.automove = AutoMove(config, browser)
+        self.human_delays = HumanDelays(config)  # Phase 2
+        self.idle_actions = IdleActions(config, browser)  # Phase 3
         self.color = None
         self.opening_book_reader = None
         self.book_paths = []
@@ -97,8 +101,11 @@ class Game:
             self.browser.page.screenshot(path=screenshot_path)
             logging.error(f"Move list element not found: {e}. Screenshot saved to {screenshot_path}")
             raise
-        
+
         while True:
+            # Phase 3: Perform idle actions during opponent's turn
+            self.idle_actions.perform_idle_action()
+
             # Prioritize checking for game result element
             game_result_element = self.browser.page.query_selector(selectors.GAME_RESULT_SELECTOR)
             if game_result_element:
@@ -110,7 +117,7 @@ class Game:
                 result = self.board.result()
                 logging.info(f"Game is over. Result: {result}")
                 return # Exit track_moves if game is over
-            
+
             # Check for game over modal as an alternative way to detect game end
             game_over_modal = self.browser.page.query_selector(".game-over-modal-content")
             if game_over_modal:
@@ -285,40 +292,34 @@ class Game:
                 logging.error("No best move found by the engine.")
                 return
 
-            # Contextual thinking time
-            additional_delay = 0
-
+            # Phase 2: Human-like thinking delays
             if self.board.ply() < 2:
-                logging.info("First move detected. Playing faster.")
-                additional_delay = random.uniform(1, 3) # 1-3 seconds delay
+                # First move - use special first move delay
+                delay = self.human_delays.get_first_move_delay()
+                logging.info(f"First move delay: {delay:.1f}s")
+                time.sleep(delay)
             else:
-                # Advanced Time Management
+                # Calculate move complexity based on number of legal moves
+                num_legal_moves = len(list(self.board.legal_moves))
+                move_complexity = 1.0
+
+                if num_legal_moves > 30:
+                    move_complexity = 1.5  # Complex position
+                elif num_legal_moves < 10:
+                    move_complexity = 0.8  # Simple position
+
+                # Apply human-like delay with exponential distribution
+                self.human_delays.apply_thinking_delay(game_phase, move_complexity)
+
+                # Also consider remaining time (Advanced Time Management)
                 advanced_time_management = self.config.getboolean("play", "advanced_time_management")
                 if advanced_time_management:
                     remaining_time = self._get_remaining_time()
-                    if remaining_time is not None:
-                        delay_range = (0, 0) # (min, max)
-                        if remaining_time > 540: # > 9 minutes
-                            delay_range = (5, 15)
-                        elif remaining_time > 480: # 8-9 minutes
-                            delay_range = (4, 10)
-                        elif remaining_time > 360: # 6-8 minutes
-                            delay_range = (3, 8)
-                        elif remaining_time > 240: # 4-6 minutes
-                            delay_range = (2, 6)
-                        elif remaining_time > 120: # 2-4 minutes
-                            delay_range = (1, 4)
-                        elif remaining_time > 60: # 1-2 minutes
-                            delay_range = (0.5, 2)
-                        else: # < 1 minute
-                            delay_range = (0.1, 0.5)
-                        
-                        logging.debug(f"Time-based delay range: {delay_range[0]}-{delay_range[1]}s.")
-                        additional_delay += random.uniform(delay_range[0], delay_range[1])
-
-            if additional_delay > 0:
-                logging.debug(f"Applying total additional delay of {additional_delay:.2f}s.")
-                time.sleep(additional_delay) # Use time.sleep for seconds
+                    if remaining_time is not None and remaining_time < 60:
+                        # Speed up if low on time (override human delays)
+                        logging.debug("Low time detected, playing faster")
+                        # Skip human delay in time pressure
+                        pass
 
             logging.debug("Starting highlight process...")
             from_square_alg = chess.square_name(best_move.from_square)

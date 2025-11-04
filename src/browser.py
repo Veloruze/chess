@@ -1,6 +1,7 @@
 import logging
 from playwright.sync_api import sync_playwright, Page, Browser
 from src import selectors
+from src.human_typing import HumanTyping
 import re
 
 class ChessBrowser:
@@ -11,11 +12,27 @@ class ChessBrowser:
         self.page = None
         self.nickname = "null"
         self.current_elo = "null"
+        self.human_typing = HumanTyping(config)
 
     def start(self):
         """Starts the browser with anti-detection features."""
         logging.debug("Starting browser with stealth mode...")
         self.playwright = sync_playwright().start()
+
+        # Phase 4: Randomize window size to prevent fingerprinting
+        import random
+        if self.config.getboolean("viewport", "randomize_window_size", fallback=False):
+            min_width = self.config.getint("viewport", "min_window_width", fallback=1366)
+            max_width = self.config.getint("viewport", "max_window_width", fallback=1920)
+            min_height = self.config.getint("viewport", "min_window_height", fallback=768)
+            max_height = self.config.getint("viewport", "max_window_height", fallback=1080)
+
+            window_width = random.randint(min_width, max_width)
+            window_height = random.randint(min_height, max_height)
+            logging.info(f"Randomized window size: {window_width}x{window_height}")
+        else:
+            window_width = 1920
+            window_height = 1080
 
         # Launch browser with anti-automation flags
         self.browser = self.playwright.chromium.launch(
@@ -26,7 +43,7 @@ class ChessBrowser:
                 '--no-sandbox',
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
-                '--window-size=1920,1080',
+                f'--window-size={window_width},{window_height}',
                 '--disable-gpu',
                 '--no-first-run',
                 '--no-default-browser-check',
@@ -34,6 +51,12 @@ class ChessBrowser:
         )
 
         self.page = self.browser.new_page()
+
+        # Phase 4: Randomize viewport zoom (80-120%)
+        if self.config.getboolean("viewport", "randomize_zoom", fallback=False):
+            zoom_level = random.uniform(0.9, 1.1)
+            self.page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
+            logging.debug(f"Randomized zoom level: {zoom_level:.2f}")
 
         # Inject stealth scripts to mask automation
         self.page.add_init_script("""
@@ -74,11 +97,14 @@ class ChessBrowser:
         logging.info("Browser started with anti-detection features enabled")
 
     def login(self, username, password):
-        """Logs into chess.com."""
+        """Logs into chess.com with human-like typing."""
         logging.debug("Logging in...")
         self.page.goto("https://www.chess.com/login")
-        self.page.fill(selectors.LOGIN_USERNAME_INPUT, username)
-        self.page.fill(selectors.LOGIN_PASSWORD_INPUT, password)
+
+        # Phase 5: Use human-like typing for credentials
+        self.human_typing.type_text(self.page, selectors.LOGIN_USERNAME_INPUT, username)
+        self.human_typing.pause_before_action(0.3, 0.8)
+        self.human_typing.type_text(self.page, selectors.LOGIN_PASSWORD_INPUT, password)
         login_button_selectors = [
             "button:has-text('Log In')",
             "button[type='submit']", # Fallback
