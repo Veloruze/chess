@@ -144,10 +144,40 @@ class ChessBrowser:
         """Selects the game mode."""
         logging.info(f"Selecting mode: {self.config.get('play', 'mode')}")
         try:
-            self.page.goto("https://www.chess.com/play/online", timeout=30000) # Increased timeout for goto
-            self.page.wait_for_url("https://www.chess.com/play/online", timeout=30000) # Explicitly wait for URL
-            self.page.wait_for_selector(selectors.TIME_CONTROL_DROPDOWN_BUTTON, timeout=30000) # Wait for a key element
-            logging.info("Successfully navigated to play online page.")
+            # Go to the main play page first
+            self.page.goto("https://www.chess.com/play/online", timeout=30000)
+            self.page.wait_for_load_state("networkidle", timeout=10000)
+            logging.info("Navigated to play online page.")
+
+            # Wait for page to fully load
+            import time
+            time.sleep(2)
+
+            # Check if we need to select opponent type (vs Computer, vs Person, etc)
+            # Sometimes Chess.com defaults to "Friend" mode, we need "Online" mode
+            try:
+                # Look for "Online" or "Rated" option and click it
+                online_selectors = [
+                    "button:has-text('Online')",
+                    "button:has-text('Rated')",
+                    "[data-cy='challenge-online']",
+                ]
+                for sel in online_selectors:
+                    try:
+                        elem = self.page.query_selector(sel)
+                        if elem:
+                            elem.click()
+                            logging.info(f"Clicked online/rated mode selector: {sel}")
+                            time.sleep(1)
+                            break
+                    except:
+                        pass
+            except Exception as e:
+                logging.debug(f"Could not select opponent type (may not be needed): {e}")
+
+            # Wait for time control dropdown
+            self.page.wait_for_selector(selectors.TIME_CONTROL_DROPDOWN_BUTTON, timeout=30000)
+            logging.info("Time control dropdown found.")
         except Exception as e:
             screenshot_path = "play_online_navigation_failure.png"
             self.page.screenshot(path=screenshot_path)
