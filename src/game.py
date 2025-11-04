@@ -225,11 +225,20 @@ class Game:
             # It looks for the time element for the current player (bottom player)
             time_element_selector = ".clock-bottom .clock-time-monospace"
             time_text = self.browser.page.evaluate(f"document.querySelector('{time_element_selector}').innerText")
-            
-            # Parse time_text (e.g., "0:59", "1:30", "10:00") into seconds
-            minutes, seconds = map(int, time_text.split(':'))
-            remaining_seconds = minutes * 60 + seconds
-            logging.debug(f"Remaining time detected: {remaining_seconds} seconds")
+
+            # Parse time_text - two formats:
+            # Format 1 (>20s): "0:59", "1:30", "10:00" (minutes:seconds)
+            # Format 2 (<20s): "19.2", "12.6", "5.1" (seconds.decimal)
+
+            if ':' in time_text:
+                # Format 1: "mm:ss"
+                minutes, seconds = map(int, time_text.split(':'))
+                remaining_seconds = minutes * 60 + seconds
+            else:
+                # Format 2: "ss.d" (decimal seconds)
+                remaining_seconds = int(float(time_text))
+
+            logging.debug(f"Remaining time detected: {remaining_seconds}s (from '{time_text}')")
             return remaining_seconds
         except Exception as e:
             logging.warning(f"Could not get remaining time from UI: {e}")
