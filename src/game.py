@@ -228,15 +228,15 @@ class Game:
 
             # Parse time_text - two formats:
             # Format 1 (>20s): "0:59", "1:30", "10:00" (minutes:seconds)
-            # Format 2 (<20s): "19.2", "12.6", "5.1" (seconds.decimal)
+            # Format 2 (<20s): "19.2", "12.6", "5.1", "01.4" (seconds.decimal with possible leading zero)
 
             if ':' in time_text:
                 # Format 1: "mm:ss"
                 minutes, seconds = map(int, time_text.split(':'))
                 remaining_seconds = minutes * 60 + seconds
             else:
-                # Format 2: "ss.d" (decimal seconds)
-                remaining_seconds = int(float(time_text))
+                # Format 2: "ss.d" (decimal seconds) - strip leading zeros
+                remaining_seconds = int(float(time_text.lstrip('0') or '0'))
 
             logging.debug(f"Remaining time detected: {remaining_seconds}s (from '{time_text}')")
             return remaining_seconds
