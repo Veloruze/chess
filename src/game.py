@@ -293,15 +293,15 @@ class Game:
                 return
 
             # Phase 2: Human-like thinking delays
+            # Get game mode from config
+            game_mode = self.config.get("play", "mode", fallback="Blitz")
+
             if self.board.ply() < 2:
                 # First move - use special first move delay
-                delay = self.human_delays.get_first_move_delay()
-                logging.info(f"First move delay: {delay:.1f}s")
+                delay = self.human_delays.get_first_move_delay(game_mode)
+                logging.info(f"First move delay: {delay:.1f}s (mode: {game_mode})")
                 time.sleep(delay)
             else:
-                # Get game mode from config
-                game_mode = self.config.get("play", "mode", fallback="Blitz")
-
                 # AGGRESSIVE Time Management: Check time FIRST before applying delays
                 advanced_time_management = self.config.getboolean("play", "advanced_time_management")
                 use_fast_mode = False

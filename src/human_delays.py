@@ -45,7 +45,7 @@ class HumanDelays:
 
         # Define maximum delays based on game mode (OPTIMIZED FOR SPEED)
         mode_limits = {
-            "Bullet": {"max": 2.0, "deep_thought_max": 3.0},   # 1 min games - very fast
+            "Bullet": {"max": 1.5, "deep_thought_max": 2.5},   # 1 min games - ULTRA FAST
             "Blitz": {"max": 4.0, "deep_thought_max": 6.0},    # 3 min games - fast play
             "Rapid": {"max": 15.0, "deep_thought_max": 30.0}   # 10+ min games - normal thinking
         }
@@ -122,9 +122,12 @@ class HumanDelays:
             if i < chunks - 1:
                 time.sleep(random.uniform(0.1, 0.5))
 
-    def get_first_move_delay(self):
+    def get_first_move_delay(self, game_mode="Blitz"):
         """
         Special delay for the very first move (usually faster).
+
+        Args:
+            game_mode: Game mode to determine appropriate first move delay
 
         Returns:
             Delay in seconds
@@ -133,7 +136,13 @@ class HumanDelays:
             return random.uniform(1, 3)
 
         # First moves are typically faster (opening theory)
-        return random.uniform(1.5, 4.0)
+        # Mode-specific delays
+        if game_mode == "Bullet":
+            return random.uniform(0.5, 1.5)  # Very fast in Bullet
+        elif game_mode == "Blitz":
+            return random.uniform(1.0, 2.5)  # Fast in Blitz
+        else:  # Rapid
+            return random.uniform(1.5, 4.0)  # Normal in Rapid
 
     def get_premove_delay(self):
         """
