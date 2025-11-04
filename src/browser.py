@@ -257,43 +257,52 @@ class ChessBrowser:
 
     def _extract_user_info(self):
         """Extracts nickname and ELO rating from the current page."""
+        # Note: User info extraction disabled - selectors need updating for current Chess.com UI
+        # This is non-critical for gameplay functionality
         try:
-            # Wait for at least one of the nickname selectors to be visible
-            # Use page.locator().or_().wait_for() for multiple XPath selectors
-            self.page.locator(selectors.USER_TAGLINE_USERNAME_SELECTOR).or_(
-                self.page.locator(selectors.CC_USER_USERNAME_SELECTOR)
-            ).wait_for(timeout=10000)
+            # Try to extract username from common selectors
+            username_selectors = [
+                ".user-username-component",
+                ".user-tagline-username",
+                "[class*='username']"
+            ]
 
-            # Extract Nickname
-            nickname_element = self.page.query_selector(selectors.USER_TAGLINE_USERNAME_SELECTOR) or \
-                               self.page.query_selector(selectors.CC_USER_USERNAME_SELECTOR)
-            if nickname_element:
-                self.nickname = nickname_element.inner_text().strip()
-            else:
-                self.nickname = "null"
+            for selector in username_selectors:
+                try:
+                    elem = self.page.query_selector(selector)
+                    if elem:
+                        self.nickname = elem.inner_text().strip()
+                        logging.debug(f"Found username: {self.nickname}")
+                        break
+                except:
+                    continue
 
-            # Wait for at least one of the ELO selectors to be visible
-            self.page.locator(selectors.CC_USER_RATING_SELECTOR_WHITE).or_(
-                self.page.locator(selectors.CC_USER_RATING_SELECTOR_BLACK)
-            ).wait_for(timeout=10000)
-            # Extract ELO Rating
-            elo_element = self.page.query_selector(selectors.CC_USER_RATING_SELECTOR_WHITE) or \
-                          self.page.query_selector(selectors.CC_USER_RATING_SELECTOR_BLACK)
-            if elo_element:
-                elo_text = elo_element.inner_text().strip()
-                elo_match = re.search(r'\((\d+)\)', elo_text)
-                if elo_match:
-                    self.current_elo = elo_match.group(1)
-                else:
-                    self.current_elo = "null"
-            else:
-                self.current_elo = "null"
+            # Try to extract rating
+            rating_selectors = [
+                ".user-tagline-rating",
+                "[class*='rating']",
+                ".clock-bottom"
+            ]
 
-            logging.info(f"User: {self.nickname}, ELO: {self.current_elo}")
+            for selector in rating_selectors:
+                try:
+                    elem = self.page.query_selector(selector)
+                    if elem:
+                        text = elem.inner_text().strip()
+                        elo_match = re.search(r'\((\d+)\)', text)
+                        if elo_match:
+                            self.current_elo = elo_match.group(1)
+                            logging.debug(f"Found ELO: {self.current_elo}")
+                            break
+                except:
+                    continue
+
+            if self.nickname != "null" and self.current_elo != "null":
+                logging.info(f"User: {self.nickname}, ELO: {self.current_elo}")
+
         except Exception as e:
-            logging.warning(f"Could not extract user info: {e}")
-            self.nickname = "null"
-            self.current_elo = "null"
+            logging.debug(f"Could not extract user info: {e}")
+            # Non-critical, continue without user info
 
     def close(self):
         """Closes the browser."""
