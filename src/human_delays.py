@@ -43,11 +43,11 @@ class HumanDelays:
         if not self.enabled:
             return 0
 
-        # Define maximum delays based on game mode (realistic for humans)
+        # Define maximum delays based on game mode (OPTIMIZED FOR SPEED)
         mode_limits = {
-            "Bullet": {"max": 3.0, "deep_thought_max": 5.0},   # 1 min games - must move fast
-            "Blitz": {"max": 6.0, "deep_thought_max": 10.0},   # 3 min games - moderate thinking
-            "Rapid": {"max": 20.0, "deep_thought_max": 45.0}   # 10+ min games - can think longer
+            "Bullet": {"max": 2.0, "deep_thought_max": 3.0},   # 1 min games - very fast
+            "Blitz": {"max": 4.0, "deep_thought_max": 6.0},    # 3 min games - fast play
+            "Rapid": {"max": 15.0, "deep_thought_max": 30.0}   # 10+ min games - normal thinking
         }
 
         limits = mode_limits.get(game_mode, mode_limits["Blitz"])

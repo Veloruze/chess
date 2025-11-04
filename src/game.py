@@ -299,30 +299,46 @@ class Game:
                 logging.info(f"First move delay: {delay:.1f}s")
                 time.sleep(delay)
             else:
-                # Calculate move complexity based on number of legal moves
-                num_legal_moves = len(list(self.board.legal_moves))
-                move_complexity = 1.0
-
-                if num_legal_moves > 30:
-                    move_complexity = 1.5  # Complex position
-                elif num_legal_moves < 10:
-                    move_complexity = 0.8  # Simple position
-
                 # Get game mode from config
                 game_mode = self.config.get("play", "mode", fallback="Blitz")
 
-                # Apply human-like delay with exponential distribution
-                self.human_delays.apply_thinking_delay(game_phase, move_complexity, game_mode)
-
-                # Also consider remaining time (Advanced Time Management)
+                # AGGRESSIVE Time Management: Check time FIRST before applying delays
                 advanced_time_management = self.config.getboolean("play", "advanced_time_management")
+                use_fast_mode = False
+
                 if advanced_time_management:
                     remaining_time = self._get_remaining_time()
-                    if remaining_time is not None and remaining_time < 60:
-                        # Speed up if low on time (override human delays)
-                        logging.debug("Low time detected, playing faster")
-                        # Skip human delay in time pressure
-                        pass
+                    if remaining_time is not None:
+                        # Time pressure thresholds - kick in early to prevent timeout
+                        if remaining_time < 30:
+                            # CRITICAL: Play instantly
+                            logging.warning(f"CRITICAL TIME: {remaining_time}s - Playing instantly!")
+                            time.sleep(random.uniform(0.1, 0.3))
+                            use_fast_mode = True
+                        elif remaining_time < 60:
+                            # URGENT: Play very fast
+                            logging.info(f"URGENT TIME: {remaining_time}s - Playing very fast")
+                            time.sleep(random.uniform(0.3, 0.8))
+                            use_fast_mode = True
+                        elif remaining_time < 90 and game_mode in ["Blitz", "Bullet"]:
+                            # LOW TIME: Play faster in fast modes
+                            logging.info(f"LOW TIME: {remaining_time}s - Playing faster")
+                            time.sleep(random.uniform(0.5, 1.5))
+                            use_fast_mode = True
+
+                # Only apply normal delays if NOT in time pressure
+                if not use_fast_mode:
+                    # Calculate move complexity based on number of legal moves
+                    num_legal_moves = len(list(self.board.legal_moves))
+                    move_complexity = 1.0
+
+                    if num_legal_moves > 30:
+                        move_complexity = 1.5  # Complex position
+                    elif num_legal_moves < 10:
+                        move_complexity = 0.8  # Simple position
+
+                    # Apply human-like delay with exponential distribution
+                    self.human_delays.apply_thinking_delay(game_phase, move_complexity, game_mode)
 
             logging.debug("Starting highlight process...")
             from_square_alg = chess.square_name(best_move.from_square)
