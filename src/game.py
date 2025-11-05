@@ -335,23 +335,27 @@ class Game:
             }
 
             for piece in pieces_data['pieces']:
-                square = piece['square']  # e.g., "11", "88"
-                file_num = int(square[0]) - 1  # 1-8 -> 0-7
-                rank_num = int(square[1]) - 1  # 1-8 -> 0-7
+                square = piece['square']  # e.g., "11" = a1, "88" = h8
+                # Chess.com square notation: "XY" where X=file(1-8), Y=rank(1-8)
+                # 1=a/rank1, 2=b/rank2, ..., 8=h/rank8
+                file_num = int(square[0]) - 1  # 1-8 -> 0-7 (a-h)
+                rank_num = int(square[1]) - 1  # 1-8 -> 0-7 (rank 1-8)
 
-                # Adjust for flipped board
+                # If board is flipped (black's perspective), flip coordinates
                 if is_flipped:
-                    file_num = 7 - file_num
-                    rank_num = 7 - rank_num
+                    file_num = 7 - file_num  # a<->h
+                    rank_num = 7 - rank_num  # rank1<->rank8
 
+                # Get piece character
                 piece_char = piece_map.get(piece['pieceType'], '?')
                 if piece['color'] == 'w':
                     piece_char = piece_char.upper()
 
-                # Chess FEN is rank 8 -> rank 1 (top to bottom)
-                # board_array is indexed [rank][file] where rank 0 = rank 8
-                fen_rank = 7 - rank_num
-                board_array[fen_rank][file_num] = piece_char
+                # FEN format: board_array[0] = rank 8, board_array[7] = rank 1
+                # rank_num: 0 = rank 1, 7 = rank 8
+                # So: array_index = 7 - rank_num
+                fen_array_index = 7 - rank_num
+                board_array[fen_array_index][file_num] = piece_char
 
             # Convert board array to FEN
             fen_rows = []
@@ -607,8 +611,7 @@ class Game:
             self.board.push(best_move)
 
             # Verify board sync after our move (handles manual intervention)
-            # TEMPORARILY DISABLED - FEN extraction needs debugging
-            # self._verify_board_sync()
+            self._verify_board_sync()
 
         except Exception as e:
             logging.error(f"An error occurred in play_best_move: {e}")
