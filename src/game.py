@@ -279,6 +279,151 @@ class Game:
             logging.warning(f"Could not get remaining time from UI: {e}")
             return None # Return None if time cannot be retrieved
 
+    def _extract_fen_from_ui(self):
+        """Extract current board FEN from Chess.com UI by reading piece positions."""
+        try:
+            # Read all pieces from board
+            pieces_data = self.browser.page.evaluate("""
+                () => {
+                    const board = document.querySelector('.board');
+                    if (!board) return null;
+
+                    const isFlipped = board.classList.contains('flipped');
+                    const pieces = [];
+
+                    // Find all pieces on board
+                    document.querySelectorAll('.piece').forEach(piece => {
+                        const classes = piece.className.split(' ');
+                        let square = null;
+                        let pieceType = null;
+                        let color = null;
+
+                        classes.forEach(cls => {
+                            // Extract square position (e.g., "square-11", "square-88")
+                            if (cls.startsWith('square-')) {
+                                square = cls.replace('square-', '');
+                            }
+                            // Extract piece type (bp, wk, br, etc.)
+                            else if (cls.length === 2 && (cls[0] === 'w' || cls[0] === 'b')) {
+                                color = cls[0];
+                                pieceType = cls[1];
+                            }
+                        });
+
+                        if (square && pieceType && color) {
+                            pieces.push({square, pieceType, color});
+                        }
+                    });
+
+                    return {pieces, isFlipped};
+                }
+            """)
+
+            if not pieces_data or not pieces_data.get('pieces'):
+                logging.debug("Could not extract pieces from UI")
+                return None
+
+            # Build FEN from pieces
+            # Initialize empty 8x8 board
+            board_array = [['.' for _ in range(8)] for _ in range(8)]
+
+            is_flipped = pieces_data.get('isFlipped', False)
+
+            # Map pieces to board array
+            piece_map = {
+                'p': 'p', 'n': 'n', 'b': 'b', 'r': 'r', 'q': 'q', 'k': 'k'
+            }
+
+            for piece in pieces_data['pieces']:
+                square = piece['square']  # e.g., "11", "88"
+                file_num = int(square[0]) - 1  # 1-8 -> 0-7
+                rank_num = int(square[1]) - 1  # 1-8 -> 0-7
+
+                # Adjust for flipped board
+                if is_flipped:
+                    file_num = 7 - file_num
+                    rank_num = 7 - rank_num
+
+                piece_char = piece_map.get(piece['pieceType'], '?')
+                if piece['color'] == 'w':
+                    piece_char = piece_char.upper()
+
+                # Chess FEN is rank 8 -> rank 1 (top to bottom)
+                # board_array is indexed [rank][file] where rank 0 = rank 8
+                fen_rank = 7 - rank_num
+                board_array[fen_rank][file_num] = piece_char
+
+            # Convert board array to FEN
+            fen_rows = []
+            for row in board_array:
+                fen_row = ""
+                empty_count = 0
+                for square in row:
+                    if square == '.':
+                        empty_count += 1
+                    else:
+                        if empty_count > 0:
+                            fen_row += str(empty_count)
+                            empty_count = 0
+                        fen_row += square
+                if empty_count > 0:
+                    fen_row += str(empty_count)
+                fen_rows.append(fen_row)
+
+            fen_position = '/'.join(fen_rows)
+
+            # Add turn info (we'll get this from whose turn it is)
+            turn = 'w' if self.board.turn == chess.WHITE else 'b'
+
+            # Simplified FEN (without castling rights, en passant, halfmove, fullmove)
+            # We'll just sync the piece positions
+            simplified_fen = f"{fen_position} {turn} - - 0 1"
+
+            logging.debug(f"Extracted FEN from UI: {simplified_fen}")
+            return simplified_fen
+
+        except Exception as e:
+            logging.debug(f"Error extracting FEN from UI: {e}")
+            return None
+
+    def _verify_board_sync(self):
+        """Verify bot internal board matches UI, resync if needed."""
+        try:
+            ui_fen = self._extract_fen_from_ui()
+            if not ui_fen:
+                logging.debug("Could not extract UI FEN, skipping sync verification")
+                return True
+
+            # Compare piece positions only (ignore castling rights, en passant, etc.)
+            internal_fen_parts = self.board.fen().split()
+            ui_fen_parts = ui_fen.split()
+
+            internal_position = internal_fen_parts[0]  # Just piece positions
+            ui_position = ui_fen_parts[0]
+
+            if internal_position != ui_position:
+                logging.warning(f"Board desync detected!")
+                logging.warning(f"Internal FEN: {self.board.fen()}")
+                logging.warning(f"UI FEN: {ui_fen}")
+                logging.warning(f"Resyncing from UI...")
+
+                try:
+                    # Try to create board from UI FEN
+                    new_board = chess.Board(ui_fen)
+                    self.board = new_board
+                    logging.info("Successfully resynced board from UI!")
+                    return True
+                except Exception as e:
+                    logging.error(f"Failed to resync board: {e}")
+                    return False
+            else:
+                logging.debug("Board sync verified - internal matches UI")
+                return True
+
+        except Exception as e:
+            logging.debug(f"Error during board sync verification: {e}")
+            return True  # Don't break game if sync check fails
+
     def _get_game_phase(self):
         """
         Determines the current game phase.
@@ -286,16 +431,16 @@ class Game:
         # Opening: less than 10 full moves (20 ply)
         if self.board.fullmove_number < 10:
             return "opening"
-        
+
         # Endgame: simple piece count heuristic
         # Count major and minor pieces for both sides
         pieces = self.board.piece_map()
         num_pieces = len(pieces)
-        
+
         # A simple heuristic for endgame: if total number of pieces is less than 10 (e.g. 2 kings + 8 other pieces)
         if num_pieces < 10:
             return "endgame"
-            
+
         return "middlegame"
 
     def play_best_move(self):
@@ -460,5 +605,9 @@ class Game:
             self.automove.execute_move(best_move, self.board.ply() // 2, is_flipped=self.color == chess.BLACK, move_duration=move_duration)
             logging.debug("Auto-move process finished. Pushing move to board.")
             self.board.push(best_move)
+
+            # Verify board sync after our move (handles manual intervention)
+            self._verify_board_sync()
+
         except Exception as e:
             logging.error(f"An error occurred in play_best_move: {e}")
