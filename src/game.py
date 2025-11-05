@@ -82,13 +82,40 @@ class Game:
         board_element = self.browser.page.wait_for_selector(selectors.BOARD_SELECTOR, timeout=120000)  # 2 minutes
         logging.info("Game board loaded, opponent found!")
         self.browser._extract_user_info() # Extract user info now that the game board is loaded
-        class_name = board_element.get_attribute("class")
-        if "flipped" in class_name:
+
+        # Method 1: Check class attribute
+        class_name = board_element.get_attribute("class") or ""
+        is_flipped_by_class = "flipped" in class_name
+
+        # Method 2: Check coordinate SVG (more reliable)
+        is_flipped_by_coords = False
+        try:
+            # Check bottom-left coordinate text (should be "a" for white, "h" for black)
+            coord_selector = ".coordinates text:last-child"
+            coord_text = self.browser.page.evaluate(f"document.querySelector('{coord_selector}')?.textContent")
+            if coord_text:
+                # If bottom-right is "a", board is flipped (playing as black)
+                # If bottom-right is "h", board is NOT flipped (playing as white)
+                is_flipped_by_coords = (coord_text.strip() == "a")
+                logging.debug(f"Coordinate detection: bottom-right = '{coord_text}', flipped = {is_flipped_by_coords}")
+        except Exception as e:
+            logging.debug(f"Could not detect color from coordinates: {e}")
+
+        # Determine color (prefer coordinate method as it's more reliable)
+        if coord_text:
+            is_flipped = is_flipped_by_coords
+            detection_method = "coordinates"
+        else:
+            is_flipped = is_flipped_by_class
+            detection_method = "class attribute"
+
+        if is_flipped:
             self.color = chess.BLACK
-            logging.debug("Playing as BLACK")
+            logging.info(f"Playing as BLACK (detected via {detection_method})")
         else:
             self.color = chess.WHITE
-            logging.debug("Playing as WHITE")
+            logging.info(f"Playing as WHITE (detected via {detection_method})")
+
         logging.debug(f"Detected color: {self.color} (chess.WHITE: {chess.WHITE}, chess.BLACK: {chess.BLACK})")
 
     
