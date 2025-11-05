@@ -279,6 +279,63 @@ class Game:
             logging.warning(f"Could not get remaining time from UI: {e}")
             return None # Return None if time cannot be retrieved
 
+    def _extract_move_history_from_ui(self):
+        """Extract complete move history from Chess.com move list."""
+        try:
+            # Get all moves from move list
+            moves_data = self.browser.page.evaluate("""
+                () => {
+                    const moves = [];
+                    // Find all move elements
+                    document.querySelectorAll('wc-simple-move-list [data-node]').forEach(elem => {
+                        const node = elem.getAttribute('data-node');
+                        const text = elem.innerText.trim();
+                        if (node && text) {
+                            // node format: "0-X" where X is ply number
+                            const ply = parseInt(node.split('-')[1]);
+                            // Extract SAN move (remove move number like "1. " or "1... ")
+                            const san = text.split('.').pop().trim();
+                            if (san && san.length > 0) {
+                                moves.push({ply, san});
+                            }
+                        }
+                    });
+                    return moves.sort((a, b) => a.ply - b.ply);
+                }
+            """)
+
+            if not moves_data:
+                logging.debug("Could not extract moves from UI")
+                return None
+
+            # Rebuild board from move history
+            temp_board = chess.Board()
+            for move_data in moves_data:
+                san = move_data['san']
+                try:
+                    move = temp_board.parse_san(san)
+                    temp_board.push(move)
+                except ValueError:
+                    # Try to find move by matching
+                    found = False
+                    for legal_move in temp_board.legal_moves:
+                        if temp_board.san(legal_move) == san or temp_board.san(legal_move).endswith(san):
+                            temp_board.push(legal_move)
+                            found = True
+                            break
+                    if not found:
+                        logging.warning(f"Could not parse move from history: {san}")
+                        return None  # Invalid move history, can't sync
+
+            logging.debug(f"Rebuilt board from {len(moves_data)} moves: {temp_board.fen()}")
+            return temp_board.fen()
+
+        except Exception as e:
+            logging.debug(f"Error extracting move history from UI: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def _extract_fen_from_ui(self):
         """Extract current board FEN from Chess.com UI by reading piece positions."""
         try:
@@ -391,11 +448,12 @@ class Game:
             return None
 
     def _verify_board_sync(self):
-        """Verify bot internal board matches UI, resync if needed."""
+        """Verify bot internal board matches UI by comparing move history."""
         try:
-            ui_fen = self._extract_fen_from_ui()
+            # Extract FEN by rebuilding from move history (more reliable)
+            ui_fen = self._extract_move_history_from_ui()
             if not ui_fen:
-                logging.debug("Could not extract UI FEN, skipping sync verification")
+                logging.debug("Could not extract move history, skipping sync verification")
                 return True
 
             # Compare piece positions only (ignore castling rights, en passant, etc.)
@@ -408,20 +466,20 @@ class Game:
             if internal_position != ui_position:
                 logging.warning(f"Board desync detected!")
                 logging.warning(f"Internal FEN: {self.board.fen()}")
-                logging.warning(f"UI FEN: {ui_fen}")
-                logging.warning(f"Resyncing from UI...")
+                logging.warning(f"UI FEN (from move history): {ui_fen}")
+                logging.warning(f"Resyncing from move history...")
 
                 try:
                     # Try to create board from UI FEN
                     new_board = chess.Board(ui_fen)
                     self.board = new_board
-                    logging.info("Successfully resynced board from UI!")
+                    logging.info("Successfully resynced board from move history!")
                     return True
                 except Exception as e:
                     logging.error(f"Failed to resync board: {e}")
                     return False
             else:
-                logging.debug("Board sync verified - internal matches UI")
+                logging.debug("Board sync verified - internal matches move history")
                 return True
 
         except Exception as e:
@@ -611,7 +669,7 @@ class Game:
             self.board.push(best_move)
 
             # Verify board sync after our move (handles manual intervention)
-            # self._verify_board_sync()  # DISABLED: buggy
+            self._verify_board_sync()
 
         except Exception as e:
             logging.error(f"An error occurred in play_best_move: {e}")
