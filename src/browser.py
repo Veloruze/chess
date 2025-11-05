@@ -146,12 +146,15 @@ class ChessBrowser:
         try:
             # Go to the main play page first
             self.page.goto("https://www.chess.com/play/online", timeout=30000)
-            self.page.wait_for_load_state("networkidle", timeout=10000)
+
+            # Don't wait for networkidle (too unreliable with ads/tracking)
+            # Instead wait for domcontentloaded which is faster and more reliable
+            self.page.wait_for_load_state("domcontentloaded", timeout=15000)
             logging.info("Navigated to play online page.")
 
-            # Wait for page to fully load
+            # Wait for page to fully load and ads to settle
             import time
-            time.sleep(2)
+            time.sleep(3)
 
             # Check if we need to select opponent type (vs Computer, vs Person, etc)
             # Sometimes Chess.com defaults to "Friend" mode, we need "Online" mode
