@@ -231,17 +231,20 @@ class Game:
             time_element_selector = ".clock-bottom .clock-time-monospace"
             time_text = self.browser.page.evaluate(f"document.querySelector('{time_element_selector}').innerText")
 
+            # Clean whitespace
+            time_text = time_text.strip()
+
             # Parse time_text - two formats:
             # Format 1 (>20s): "0:59", "1:30", "10:00" (minutes:seconds)
-            # Format 2 (<20s): "19.2", "12.6", "5.1", "01.4" (seconds.decimal with possible leading zero)
+            # Format 2 (<20s): "19.8", "12.6", "5.1", "01.4" (seconds.decimal)
 
             if ':' in time_text:
                 # Format 1: "mm:ss"
                 minutes, seconds = map(int, time_text.split(':'))
                 remaining_seconds = minutes * 60 + seconds
             else:
-                # Format 2: "ss.d" (decimal seconds) - strip leading zeros
-                remaining_seconds = int(float(time_text.lstrip('0') or '0'))
+                # Format 2: "ss.d" (decimal seconds) - just convert to int
+                remaining_seconds = int(float(time_text))
 
             logging.debug(f"Remaining time detected: {remaining_seconds}s (from '{time_text}')")
             return remaining_seconds
