@@ -607,7 +607,8 @@ class Game:
             self.board.push(best_move)
 
             # Verify board sync after our move (handles manual intervention)
-            self._verify_board_sync()
+            # TEMPORARILY DISABLED - FEN extraction needs debugging
+            # self._verify_board_sync()
 
         except Exception as e:
             logging.error(f"An error occurred in play_best_move: {e}")
