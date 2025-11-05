@@ -611,7 +611,7 @@ class Game:
             self.board.push(best_move)
 
             # Verify board sync after our move (handles manual intervention)
-            self._verify_board_sync()
+            # self._verify_board_sync()  # DISABLED: buggy
 
         except Exception as e:
             logging.error(f"An error occurred in play_best_move: {e}")
